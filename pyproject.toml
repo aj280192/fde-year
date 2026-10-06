@@ -1,0 +1,18 @@
+[project]
+name = "fde-year"
+version = "0.1.0"
+description = "This repository documents my technical roadmap and project milestones toward becoming a Forward Deployed AI Engineer."
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = []
+
+[dependency-groups]
+dev = [
+    "pre-commit>=4.6.2",
+    "pyright>=1.1.414",
+    "pytest>=9.1.1",
+    "ruff>=0.16.10",
+]
+
+[tool.pyright]
+typeCheckingMode = "strict"
