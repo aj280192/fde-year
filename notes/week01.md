@@ -27,3 +27,38 @@ uv init # creates a new Python project by generating a standard configuration fi
 uv add --dev ruff pyright pytest # ruff -> linter and code formatter, pyright -> static type checker, pre-commit -> git precommit hooks and pytest -> testing framework [All added as dev packages]
 uv run pre-commit install # installs the pre-commit hooks based on the .pre-commit-config.yaml definition
 ```
+
+## Weekly note: week 1, 5 to 11 October 2026
+
+### Baselines
+
+| Baseline | Result | Note |
+| --- | --- | --- |
+| CRUD API, 80 minutes, unaided | finished | lookups: pydantic, return status, raise http error and how to start fastAPI server. |
+| Coding: Contains Duplicate | finished | My solution was trading space of time complexity. |
+| Coding: Valid Anagram | finished | My solution had O(n) space complexity while the actual better solution had O(1) with sort and compare. |
+| Design: RAG assistant for 10,000 employees | 2.1 | lowest dimension: evaluation, access and scalability. |
+
+### What I built
+In-memory CURD, fde-year repo, installing tools for TypeScript.
+
+### What broke
+1. Had to loop for http error and how to return status code.
+2. I scored less on evaluation and scable thinking.
+
+### What I would tell a customer
+If I am building any RAG or AI powered system, I would first understand the scale, data access rights, and evaluation.
+
+### My three weakest areas
+
+1. Built and shipped LLM or generative AI systems in production
+2. Agent development, including tool use
+3. RAG, embeddings and vector databases
+
+### By 29 November
+
+By this date, I want to address my weakest areas.
+
+### What is next
+
+I will be learning about production Python.
