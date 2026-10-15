@@ -1,11 +1,10 @@
+from curd_api import app
 from fastapi.testclient import TestClient
 
-from main import app  # Import your FastAPI app instance
-
-client = TestClient(app)
+client: TestClient = TestClient(app)
 
 
-def test_create_task():
+def test_create_task() -> None:
     response = client.post("/tasks", json={"title": "Test Task"})
     assert response.status_code == 201
     data = response.json()
@@ -13,7 +12,7 @@ def test_create_task():
     assert data["task"]["done"] is False
 
 
-def test_get_task():
+def test_get_task() -> None:
     response = client.post("/tasks", json={"title": "Test Task"})
     assert response.status_code == 201
     data = response.json()
@@ -26,7 +25,7 @@ def test_get_task():
     assert data["task"]["done"] is False
 
 
-def test_update_task():
+def test_update_task() -> None:
     response = client.post("/tasks", json={"title": "Test Task"})
     assert response.status_code == 201
     data = response.json()
@@ -41,7 +40,7 @@ def test_update_task():
     assert data["task"]["done"] is True
 
 
-def test_delete_task():
+def test_delete_task() -> None:
     response = client.post("/tasks", json={"title": "Test Task"})
     assert response.status_code == 201
     data = response.json()

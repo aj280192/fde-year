@@ -66,15 +66,15 @@ For NLP-to-SPL, a generated query has to be valid and repeatable, so I would use
 
 | Choice | Use the first when | Use the second when |
 | --- | --- | --- |
-| `Protocol` or abstract base class | | |
-| `TypedDict`, dataclass or Pydantic model | | |
-| `object` or `Any` | | |
+| `Protocol` or abstract base class | When you want structural "duck typing". Use it to verify an object has the right methods/attributes without forcing explicit subclassing (great for third-party plug-ins or loose interfaces). | When you want explicit class inheritance. Use it to share core code/default logic among subclasses and enforce strict implementation boundaries at runtime. |
+| `TypedDict`, dataclass or Pydantic model | When you are working with pure JSON-like dictionaries (like raw API payloads or database rows) and want key-name autocompletion without the overhead of creating a class instance. | When you need a true data object with behavior. Use a Dataclass for clean OOP models with custom methods. Use a Pydantic Model when you need runtime data validation, coercion, and parsing (like FastAPI endpoints). |
+| `object` or `Any` | When a value can literally be anything, but you still want strict type-safety. The type checker forces you to perform explicit type checks (isinstance()) before you can call methods on it. | When you want to turn off the type checker entirely for that variable. It allows you to call any method or access any attribute without a single warning (use sparingly as a last resort). |
 
 ### Pyright strict on the baseline API
 
-- Errors at the start:
-- Errors at the end:
-- The fix that taught me most:
+- Errors at the start: Partiable annotated arguments, return type missing, dict or list without type arguments.
+- Errors at the end: All fixed.
+- The fix that taught me most: How typing should be done for global arguments.
 
 ---
 
