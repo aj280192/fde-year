@@ -2,27 +2,34 @@
 
 ## Weekly note
 
-Written Sunday 18 October. 300 to 500 words.
-
 ### What I built
+
+A small Python library, `toolkit`, that validates the messages an AI agent exchanges with its tools: tool definitions, tool calls and tool results. It ships with a command, `toolkit validate calls.json`, that checks a file of tool calls, prints a report, logs each run as JSON and exits with 0, 1 or 2. It is strictly typed, tested, installable from a wheel and tagged `toolkit-v0.1.0`. The agent loop in week 9 will reuse these models.
 
 ### What broke
 
+- My first tests built invalid objects by calling the model constructors directly. Pyright strict flagged every one as a bug. The fix was to feed invalid JSON through `model_validate_json`, which is also how an agent really receives tool calls. Pyright checks the code I write; Pydantic checks the data that arrives. They are two different safety nets.
+- I used Pydantic 1 syntax, `Field(env=...)`, in my settings. Pydantic 2 ignores it with only a deprecation warning, so the setting looked configured but was read only because of the prefix.
+- I missed Tuesday and Wednesday and compressed three sessions into the weekend.
+
 ### What I would tell a customer
+
+This toolkit check every tool call your agent makes before it runs, and make the error say which field is wrong and what was expected. The model reads that error and fixes its next attempt, so a precise error is worth more than a retry.
 
 ### My checklist: production-grade Python
 
 | Item | What it means in my code | Why a customer's platform team cares |
 | --- | --- | --- |
-| Typing | | |
-| Configuration | | |
-| Logging | | |
-| Errors | | |
-| Packaging | | |
-| Tests | | |
+| Typing | Pyright in strict mode passes with 0 errors and no `type: ignore` | Wrong types are caught before deployment, and the code is safer to change |
+| Configuration | `Settings` reads `TOOLKIT_` environment variables and fails at start-up if `TOOLKIT_ENV` is missing or invalid | One build runs in dev and prod; a bad setting fails in the first second, not on the first real request |
+| Logging | One JSON line per event on standard error, with `request_id` and `duration_ms`; no secrets or prompts | Logs can be searched and filtered in Splunk; customer data stays out of them |
+| Errors | `AppError` with a stable `code` and four subclasses; exit codes 0, 1 and 2 | Callers react by type: retry a timeout, never retry bad input; pipelines can tell bad data from a broken tool |
+| Packaging | A `src/` layout, `py.typed`, a console script, a wheel that installs and runs in a clean environment | They install a versioned artefact, not a folder of scripts |
+| Tests | [13] tests, covering every invalid payload and every exit code | Behaviour is pinned down, so changes that break it fail in CI |
 
 ### What is next
 
+Week 3 is async, streaming and failure handling. The error codes from this week decide what gets retried.
 ---
 
 ## Mon 12 Oct · AI Engineering ch. 2, foundation models
