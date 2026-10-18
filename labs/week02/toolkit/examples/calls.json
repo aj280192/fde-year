@@ -1,0 +1,6 @@
+[
+  {"id": "c1", "name": "get_pod_logs", "arguments": {"pod": "api-7f9", "lines": 100}},
+  {"id": "c2", "arguments": {"pod": "api-7f9"}},
+  {"id": "c3", "name": "restart_pod", "arguments": "api-7f9"},
+  {"id": "c4", "name": "get_metrics", "arguments": {}, "priority": "high"}
+]
