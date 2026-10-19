@@ -4,3 +4,5 @@ date,prompt,type,result,minutes,time_complexity,space_complexity,what_blocked_me
 2026-10-10,Design a RAG assistant for 10000 employees,design,average 2.1,45,,,"missed: detailed evaluation, permissions, and scalability considerations"
 2026-10-16,Valid Palindrome (LC 125),coding,solved,,O(n),O(n),"optimal is O(1) space: skip non-alphanumerics in place; why it works: once front and back match neither is needed again, so each move settles one pair and the first mismatch proves it is not a palindrome"
 2026-10-16,Two Sum II (LC 167),coding,solved,,O(n),O(1),"why it works: sorted, so if sum < target the left number is too small even with the largest partner and can be dropped; if sum > target the right number is too big even with the smallest partner and can be dropped; no valid pair is ever discarded"
+2026-10-19,Best Time to Buy and Sell Stock (LC 121),coding,solved,,O(n^2),O(n),"optimal is O(n) time and O(1) space: one pass keeping the lowest price so far and the best profit so far"
+2026-10-19,Longest Substring Without Repeating Characters (LC 3),coding,not solved,25,,,"blocked: could not think of a sliding window approach; redo unaided before reading a solution"
