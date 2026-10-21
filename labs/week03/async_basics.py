@@ -3,7 +3,7 @@ import random
 import time
 
 URLS = [f"https://example.com/{i}" for i in range(1, 21)]
-SLOW_URLS = [f"https://example.com/{i}" for i in range(5, 11)]
+SLOW_URLS = {f"https://example.com/{i}" for i in range(5, 11)}
 MAX_IN_FLIGHT = 5
 TIMEOUT = 2.0
 
@@ -21,8 +21,6 @@ async def fetch(url: str, limit: asyncio.Semaphore) -> str:
             async with asyncio.timeout(TIMEOUT):
                 await asyncio.sleep(delay)  # Simulate network delay
                 return f"{url}: ok"
-        except TimeoutError:
-            raise
 
         except asyncio.CancelledError:
             print(f"Cancelled {url}")
@@ -54,7 +52,7 @@ async def main() -> None:
     try:
         await task
     except asyncio.CancelledError:
-        print("Task was cancelled successfully")
+        print(f"task.cancelled(): {task.cancelled()}")
 
 
 if __name__ == "__main__":
