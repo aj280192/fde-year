@@ -38,3 +38,23 @@
 ### Question
 
 [One thing still unclear, for example: what happens to a task's semaphore ticket when it is cancelled while waiting for one?]
+
+## Thu 22 Oct · Async LLM client
+
+Built `LLMClient` with `complete()` and `stream()` against any OpenAI-compatible endpoint, a fake model server that streams a canned answer word by word, and three tests. Ran it against both the fake server and Ollama ([model name]): the same client works for both by changing the URL.
+
+### Four decisions
+
+1. **One shared client.** Opening an HTTP connection is costly, so I create one `httpx.AsyncClient` and reuse it for every call instead of paying that cost each time.
+2. **A timeout per stage.** Each stage takes a different time: connecting should take a few seconds, while reading can take much longer. The read timeout is the longest gap between pieces, not the whole answer, so a long streamed answer does not time out while it keeps producing words.
+3. **`async with` everywhere.** The context manager always closes the connection, including when the caller stops halfway or is cancelled. The cancellation test proves the server sees the disconnect and stops sending.
+4. **Lenient response models.** Providers add fields to their responses over time, so I ignore unknown fields. My code does not break when the format grows, and Pydantic still checks the fields I read. This is the opposite of week 2: strict for untrusted input, lenient for a provider's output.
+
+### What a stream looks like
+
+Server-sent events: one `data: {json}` line per piece, separated by blank lines, ending with `data: [DONE]`. My client reads line by line, skips blank lines, stops at `[DONE]`, and yields each `delta.content`.
+
+### Results
+
+- 3 tests pass: complete, stream in order, and cancelling a stream closes the connection
+- Pyright strict: 0 errors
