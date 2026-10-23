@@ -58,3 +58,35 @@ Server-sent events: one `data: {json}` line per piece, separated by blank lines,
 
 - 3 tests pass: complete, stream in order, and cancelling a stream closes the connection
 - Pyright strict: 0 errors
+
+## Fri 23 Oct · AI Engineering ch. 3, evaluation methodology (moved from Monday)
+
+### Five lines
+
+- New: the division of evaluation into reward models, reference-based judges and preference models was partly new to me.
+- New: "exact" evaluation means a program computes the score by a fixed rule, not that the output must match word for word. So lexical and embedding similarity count as exact.
+- Changes how I would build: use exact checks wherever a right answer exists, and keep the LLM judge for what they cannot measure, such as tone or helpfulness.
+- Changes how I would build: for NLP-to-SPL, run the generated query over a fixed time window and compare the records it returns with the reference query's records. That is functional correctness, and comparing records rather than counts avoids accidental matches.
+- Question: where is LLM-as-judge not a good evaluation method?
+
+### Exact or judged
+
+| Method | Exact or judged | Needs reference answers? | One weakness |
+| --- | --- | --- | --- |
+| Functional correctness | Exact | Yes, as test cases or expected results | Cannot be used for open-ended tasks such as a customer chatbot |
+| Exact match | Exact | Yes | Misses answers that mean the same thing in different words |
+| Lexical similarity | Exact | Yes | Scores semantically similar outputs low when the wording differs |
+| Embedding similarity | Exact | Yes | Only as good as the embedding model that produces the vectors |
+| AI as a judge | Judged | Optional | Can be biased, and hard to keep consistent |
+| Comparative ranking | Judged | No | Shows which model is better, not whether either is good enough |
+
+### My benchmark at work
+
+| Metric | Exact or judged | How I use it |
+| --- | --- | --- |
+| Semantic similarity | Exact, when computed by a rule | A correct query uses the same set of operations as the reference. For "users who accessed social media", it must filter the URLs, aggregate over users and return the answer. |
+| Latency | Exact (measured) | I compare the execution time of the generated query with the reference query's. |
+| Valid query | Exact (checked by a validator) | I score whether the generated query is valid, regardless of whether it answers the question. On failure the model retries with the validation error. The benchmark's questions increase in difficulty. |
+| LLM as judge | Judged | The judge compares the generated query with the reference. |
+
+One weakness the chapter exposed: nothing in my benchmark checks that the generated query returns the right records. A query can be valid, use similar operations and win the judge's approval, yet answer the wrong question. Running both queries over the same time window and comparing their records would close that gap, which is functional correctness.
