@@ -27,10 +27,6 @@ This toolkit check every tool call your agent makes before it runs, and make the
 | Packaging | A `src/` layout, `py.typed`, a console script, a wheel that installs and runs in a clean environment | They install a versioned artefact, not a folder of scripts |
 | Tests | [13] tests, covering every invalid payload and every exit code | Behaviour is pinned down, so changes that break it fail in CI |
 
-### What is next
-
-Week 3 is async, streaming and failure handling. The error codes from this week decide what gets retried.
----
 
 ## Mon 12 Oct · AI Engineering ch. 2, foundation models
 
@@ -94,3 +90,8 @@ The code and its notes live in the lab folders. Link them here.
 - Sat 17 Oct, library with a CLI, tagged v0.1.0:
 
 Friday's two-pointer problems go in `notes/reps.csv`, not here.
+
+### What is next
+
+Week 3 is async, streaming and failure handling. The error codes from this week decide what gets retried.
+---
