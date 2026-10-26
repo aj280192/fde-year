@@ -6,3 +6,5 @@ date,prompt,type,result,minutes,time_complexity,space_complexity,what_blocked_me
 2026-10-16,Two Sum II (LC 167),coding,solved,,O(n),O(1),"why it works: sorted, so if sum < target the left number is too small even with the largest partner and can be dropped; if sum > target the right number is too big even with the smallest partner and can be dropped; no valid pair is ever discarded"
 2026-10-19,Best Time to Buy and Sell Stock (LC 121),coding,solved,,O(n^2),O(n),"optimal is O(n) time and O(1) space: one pass keeping the lowest price so far and the best profit so far"
 2026-10-19,Longest Substring Without Repeating Characters (LC 3),coding,not solved,25,,,"blocked: could not think of a sliding window approach; redo unaided before reading a solution"
+2026-10-26,LC20 Valid Parentheses,stack,solved unaided,20,O(n),O(n),"none; used a closer-to-opener map and a '#' placeholder for an empty stack"
+2026-10-26,LC155 Min Stack,stack design,solved unaided,35,O(1) per operation,O(n),"none; stored (value, min so far) per entry so pop never recomputes the min"
