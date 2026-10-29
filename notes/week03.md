@@ -159,7 +159,10 @@ Two things to remember about the table:
 
 ## Hands-On RAG for Production, ch. 2
 
-<!-- After reading, three lines: -->
-- Stages the chapter names:
-- The one I've never built myself:
-- A question for the 5 November lab:
+Full notes: [reading/hands-on-rag-ch02.md](reading/hands-on-rag-ch02.md)
+
+- **Stages the chapter names:**
+  - an ingestion flow: document parsing, chunking (fixed, fixed with overlap, recursive, semantic, document structure), embedding model selection, and the vector database and vector search
+  - a generation flow: prompt engineering, and generating with the retrieved context
+- **The one I've never built myself:** all of them in code. I know how RAG works, but the first I'll build is chunking plus hybrid retrieval in pgvector, on 5 November.
+- **Questions for the 5 November lab:** which chunking method gives the best recall@k on the Malawi booklets? Where does recall@k stop improving as k grows? Does hybrid search beat vector-only search on questions with drug names and doses?
