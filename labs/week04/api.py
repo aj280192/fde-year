@@ -1,4 +1,4 @@
-"""The agent task API. Step 4: the frame (stores, error handlers, auth). Routes come in step 5."""
+"""The agent task API: create, get, cancel and events, behind API-key auth."""
 
 import secrets
 from collections.abc import Awaitable, Callable, Mapping
@@ -10,6 +10,7 @@ from errors import (
     ApiError,
     api_error_handler,
     api_key_invalid,
+    idempotency_key_reused,
     insufficient_permission,
     not_implemented,
     task_already_finished,
@@ -17,17 +18,20 @@ from errors import (
     unhandled_error_handler,
     validation_error_handler,
 )
-from fastapi import Depends, FastAPI, Security
+from fastapi import Depends, FastAPI, Header, Query, Response, Security
 from fastapi.exceptions import RequestValidationError
 from fastapi.security import APIKeyHeader
+from idempotency import TTL, IdempotencyRecord, fingerprint
 from models import (
     TERMINAL,
     CreateTaskRequest,
     ErrorResponse,
+    ListTasksResponse,
     Task,
     TaskState,
     can_transition,
 )
+from pagination import decode_cursor, encode_cursor
 
 
 def utc_now() -> datetime:
@@ -46,6 +50,9 @@ def create_app(
     # In-memory stores, one set per app, so every test starts empty. Saturday moves them
     # behind a repository.
     tasks: dict[str, Task] = {}
+    idem: dict[
+        tuple[str, str], IdempotencyRecord
+    ] = {}  # (key_id, Idempotency-Key) -> record
     owners: dict[
         str, str
     ] = {}  # task id -> key_id; kept out of Task so it never appears in a response
@@ -87,13 +94,31 @@ def create_app(
             raise task_not_found(task_id)
         return task
 
-    # ---- Routes go here in step 5: create, get, cancel, events (and list in step 7). ----
     @app.post("/v1/tasks", status_code=202, responses=err(401, 403, 422))
-    async def Create(
-        body: CreateTaskRequest, p: Annotated[Principal, Depends(require(WRITE))]
+    async def create_task(
+        body: CreateTaskRequest,
+        p: Annotated[Principal, Depends(require(WRITE))],
+        response: Response,
+        idempotency_key: Annotated[
+            str | None, Header(min_length=1, max_length=255)
+        ] = None,
     ) -> Task:
-        stamp = now()
+        """Create a task. Returns at once with the task queued.
 
+        Send an Idempotency-Key header to make retries safe: the same key and body within
+        24 hours returns the first task instead of creating another.
+        """
+        body_fp = fingerprint(body)
+        if idempotency_key is not None:
+            # Keyed by key_id too, so two clients using the same idempotency key never collide.
+            record = idem.get((p.key_id, idempotency_key))
+            if record is not None and now() - record.created_at <= TTL:
+                if record.fingerprint != body_fp:
+                    raise idempotency_key_reused()
+                response.headers["Idempotent-Replayed"] = "true"
+                return tasks[record.task_id]  # the task as it is now, not a stored copy
+
+        stamp = now()
         task = Task(
             id="t_" + secrets.token_urlsafe(16),
             state=TaskState.QUEUED,
@@ -101,32 +126,33 @@ def create_app(
             created_at=stamp,
             updated_at=stamp,
         )
-
         tasks[task.id] = task
         owners[task.id] = p.key_id
-
+        if idempotency_key is not None:
+            idem[(p.key_id, idempotency_key)] = IdempotencyRecord(
+                fingerprint=body_fp, task_id=task.id, created_at=stamp
+            )
         return task
 
     @app.get("/v1/tasks/{task_id}", responses=err(401, 403, 404))
-    async def Get(
+    async def get_task(
         task_id: str, p: Annotated[Principal, Depends(require(READ))]
     ) -> Task:
+        """Get one task."""
         return owned(task_id, p)
 
     @app.post("/v1/tasks/{task_id}:cancel", responses=err(401, 403, 404, 409))
-    async def Cancel(
+    async def cancel_task(
         task_id: str, p: Annotated[Principal, Depends(require(WRITE))]
     ) -> Task:
+        """Cancel a task. Cancelling twice is safe."""
         task = owned(task_id, p)
-
-        if task.state == TaskState.CANCELLED:
+        if task.state is TaskState.CANCELLED:
             return task
-
         if task.state in TERMINAL or not can_transition(
             task.state, TaskState.CANCELLED
         ):
             raise task_already_finished(task_id, task.state)
-
         updated = task.model_copy(
             update={"state": TaskState.CANCELLED, "updated_at": now()}
         )
@@ -134,12 +160,38 @@ def create_app(
         return updated
 
     @app.get("/v1/tasks/{task_id}/events", responses=err(401, 403, 404, 501))
-    async def Events(
+    async def task_events(
         task_id: str, p: Annotated[Principal, Depends(require(READ))]
     ) -> None:
+        """Stream a task's events (not built until there is a worker)."""
         owned(task_id, p)
         raise not_implemented("The events stream")
 
+    @app.get("/v1/tasks", responses=err(400, 401, 403, 422))
+    async def list_tasks(
+        p: Annotated[Principal, Depends(require(READ))],
+        page_size: Annotated[int, Query(ge=1, le=100)] = 20,
+        page_token: str = "",
+    ) -> ListTasksResponse:
+        """List my tasks, newest first."""
+        mine = [
+            tasks[task_id] for task_id, owner in owners.items() if owner == p.key_id
+        ]
+        # Tuples compare position by position: created_at first, then id as the tie-breaker.
+        mine.sort(key=lambda t: (t.created_at, t.id), reverse=True)
+        if page_token:
+            cursor = decode_cursor(page_token)
+            mine = [t for t in mine if (t.created_at, t.id) < cursor]
+        page = mine[: page_size + 1]  # one extra tells us whether another page exists
+        if len(page) <= page_size:
+            return ListTasksResponse(tasks=page)
+        page = page[:page_size]
+        last = page[-1]  # the last task we RETURN, not the extra one
+        return ListTasksResponse(
+            tasks=page, next_page_token=encode_cursor(last.created_at, last.id)
+        )
+
     app.state.tasks = tasks  # lets tests put a task in a state no route can reach yet
     app.state.owners = owners
+    app.state.idem = idem
     return app

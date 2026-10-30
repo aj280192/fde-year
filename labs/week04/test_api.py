@@ -1,5 +1,6 @@
 """Step 6: the task routes and API-key auth, end to end through FastAPI's TestClient."""
 
+from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
 from typing import Any, Protocol
 
@@ -58,6 +59,16 @@ class JsonResponse(Protocol):
     """Anything with .json(). TestClient's response class differs between Starlette versions."""
 
     def json(self) -> Any: ...
+
+
+class TaskResponse(JsonResponse, Protocol):
+    """A response we also read status and headers from."""
+
+    @property
+    def status_code(self) -> int: ...
+
+    @property
+    def headers(self) -> Mapping[str, str]: ...
 
 
 def reason(response: JsonResponse) -> str:
@@ -245,3 +256,254 @@ def test_bad_input_is_rejected(client: TestClient, body: dict[str, object]) -> N
     assert response.status_code == 422
     assert reason(response) == "INVALID_REQUEST_BODY"
     assert "x" * 100 not in response.text  # the submitted value is never echoed back
+
+
+# ---- Pagination ----
+
+
+def all_pages(
+    client: TestClient, who: str, page_size: int
+) -> tuple[list[str], list[int]]:
+    """Follow next_page_token to the end. Returns every id seen, and the size of each page."""
+    ids: list[str] = []
+    sizes: list[int] = []
+    token = ""
+    while True:
+        params: dict[str, str | int] = {"page_size": page_size, "page_token": token}
+        response = client.get("/v1/tasks", params=params, headers=as_user(who))
+        assert response.status_code == 200
+        body = response.json()
+        ids += [task["id"] for task in body["tasks"]]
+        sizes.append(len(body["tasks"]))
+        token = body["next_page_token"]
+        if not token:
+            return ids, sizes
+
+
+def create_many(
+    client: TestClient, clock: FakeClock, n: int, who: str = "alice"
+) -> list[str]:
+    """Create n tasks one second apart, oldest first."""
+    ids: list[str] = []
+    for i in range(n):
+        ids.append(create(client, who=who, text=f"task {i}"))
+        clock.advance(seconds=1)
+    return ids
+
+
+def test_pages_have_the_right_sizes(client: TestClient, clock: FakeClock) -> None:
+    create_many(client, clock, 5)
+    _, sizes = all_pages(client, "alice", page_size=2)
+    assert sizes == [2, 2, 1]
+
+
+def test_pages_are_newest_first_and_complete(
+    client: TestClient, clock: FakeClock
+) -> None:
+    created = create_many(client, clock, 5)
+    seen, _ = all_pages(client, "alice", page_size=2)
+    assert seen == list(reversed(created))  # every task, once, newest first
+
+
+def test_exact_multiple_of_page_size_has_no_empty_last_page(
+    client: TestClient, clock: FakeClock
+) -> None:
+    create_many(client, clock, 4)
+    _, sizes = all_pages(client, "alice", page_size=2)
+    assert sizes == [2, 2]  # page_size + 1 means we know page 2 is the last
+
+
+def test_default_page_size_is_20(client: TestClient, clock: FakeClock) -> None:
+    create_many(client, clock, 25)
+    body = client.get("/v1/tasks", headers=as_user("alice")).json()
+    assert len(body["tasks"]) == 20
+    assert body["next_page_token"] != ""
+
+
+def test_tasks_with_the_same_timestamp_are_not_lost(
+    client: TestClient, clock: FakeClock
+) -> None:
+    # Two tasks share a created_at; only the id tie-breaker keeps them apart.
+    same_time = [create(client, text="a"), create(client, text="b")]
+    clock.advance(seconds=1)
+    later = create_many(client, clock, 3)
+    seen, _ = all_pages(client, "alice", page_size=2)
+    assert sorted(seen) == sorted(same_time + later)
+    assert len(seen) == len(set(seen)) == 5  # no task twice
+
+
+def test_new_task_while_paging_causes_no_duplicates_or_skips(
+    client: TestClient, clock: FakeClock
+) -> None:
+    original = create_many(client, clock, 5)
+    first = client.get(
+        "/v1/tasks", params={"page_size": 2}, headers=as_user("alice")
+    ).json()
+    create(client, text="arrives while the user is paging")  # newer than everything
+
+    seen = [task["id"] for task in first["tasks"]]
+    token = first["next_page_token"]
+    while token:
+        params: dict[str, str | int] = {"page_size": 2, "page_token": token}
+        body = client.get("/v1/tasks", params=params, headers=as_user("alice")).json()
+        seen += [task["id"] for task in body["tasks"]]
+        token = body["next_page_token"]
+    assert seen == list(
+        reversed(original)
+    )  # page numbers would have shown one task twice
+
+
+def test_empty_list(client: TestClient) -> None:
+    body = client.get("/v1/tasks", headers=as_user("alice")).json()
+    assert body == {"tasks": [], "next_page_token": ""}
+
+
+def test_list_shows_only_my_tasks(client: TestClient, clock: FakeClock) -> None:
+    create_many(client, clock, 3, who="alice")
+    mine = create_many(client, clock, 2, who="bob")
+    seen, _ = all_pages(client, "bob", page_size=10)
+    assert sorted(seen) == sorted(mine)
+
+
+def test_read_only_key_can_list(client: TestClient) -> None:
+    assert client.get("/v1/tasks", headers=as_user("reader")).status_code == 200
+
+
+@pytest.mark.parametrize(
+    "token",
+    [
+        "garbage",  # not base64
+        "bm90IGpzb24=",  # base64 of "not json"
+        "eyJ4IjogMX0=",  # base64 of {"x": 1}: missing keys
+        "eyJ0IjogIm5vdCBhIGRhdGUiLCAiaWQiOiAidF8xIn0=",  # "t" is not a date
+        "eyJ0IjogIjIwMjYtMTAtMjlUMTI6MDA6MDAiLCAiaWQiOiAidF8xIn0=",  # a date with no timezone
+    ],
+)
+def test_bad_page_token_is_400(client: TestClient, token: str) -> None:
+    response = client.get(
+        "/v1/tasks", params={"page_token": token}, headers=as_user("alice")
+    )
+    assert response.status_code == 400
+    assert reason(response) == "INVALID_PAGE_TOKEN"
+
+
+@pytest.mark.parametrize("size", [0, -1, 101])
+def test_page_size_out_of_range_is_422(client: TestClient, size: int) -> None:
+    response = client.get(
+        "/v1/tasks", params={"page_size": size}, headers=as_user("alice")
+    )
+    assert response.status_code == 422
+    assert reason(response) == "INVALID_QUERY_PARAMETER"
+
+
+# ---- Idempotency ----
+
+
+def with_key(who: str, key: str) -> dict[str, str]:
+    """Headers for a create that carries an Idempotency-Key."""
+    return {**as_user(who), "Idempotency-Key": key}
+
+
+def post_task(
+    client: TestClient, headers: dict[str, str], text: str = "Diagnose pods"
+) -> TaskResponse:
+    return client.post("/v1/tasks", json={"input": text}, headers=headers)
+
+
+def test_same_key_same_body_returns_the_first_task(
+    client: TestClient, app: FastAPI
+) -> None:
+    first = post_task(client, with_key("alice", "retry-1"))
+    second = post_task(client, with_key("alice", "retry-1"))
+    assert first.status_code == second.status_code == 202
+    assert second.json() == first.json()
+    assert second.headers["Idempotent-Replayed"] == "true"
+    assert "Idempotent-Replayed" not in first.headers
+    tasks: dict[str, Task] = app.state.tasks
+    assert len(tasks) == 1  # the retry created nothing
+
+
+def test_same_key_different_body_is_rejected(client: TestClient, app: FastAPI) -> None:
+    post_task(client, with_key("alice", "retry-1"), text="Diagnose pods")
+    response = post_task(client, with_key("alice", "retry-1"), text="Delete everything")
+    assert response.status_code == 422
+    assert reason(response) == "IDEMPOTENCY_KEY_REUSED"
+    tasks: dict[str, Task] = app.state.tasks
+    assert len(tasks) == 1
+
+
+def test_same_key_from_two_clients_makes_two_tasks(client: TestClient) -> None:
+    alice = post_task(client, with_key("alice", "retry-1")).json()
+    bob = post_task(client, with_key("bob", "retry-1")).json()
+    assert (
+        alice["id"] != bob["id"]
+    )  # keys are scoped per API key: no collision, no leak
+
+
+def test_different_keys_make_different_tasks(client: TestClient) -> None:
+    a = post_task(client, with_key("alice", "retry-1")).json()
+    b = post_task(client, with_key("alice", "retry-2")).json()
+    assert a["id"] != b["id"]
+
+
+def test_no_key_means_no_protection(client: TestClient, app: FastAPI) -> None:
+    post_task(client, as_user("alice"))
+    post_task(client, as_user("alice"))
+    tasks: dict[str, Task] = app.state.tasks
+    assert len(tasks) == 2
+
+
+def test_key_still_works_at_exactly_24_hours(
+    client: TestClient, clock: FakeClock
+) -> None:
+    first = post_task(client, with_key("alice", "retry-1")).json()
+    clock.advance(hours=24)
+    again = post_task(client, with_key("alice", "retry-1")).json()
+    assert again["id"] == first["id"]  # the boundary is inclusive: <= TTL
+
+
+def test_key_expires_after_24_hours(client: TestClient, clock: FakeClock) -> None:
+    first = post_task(client, with_key("alice", "retry-1")).json()
+    clock.advance(hours=24, seconds=1)
+    later = post_task(client, with_key("alice", "retry-1")).json()
+    assert later["id"] != first["id"]
+    # The new task replaces the old record, so a retry now returns the new one.
+    retry = post_task(client, with_key("alice", "retry-1")).json()
+    assert retry["id"] == later["id"]
+
+
+def test_expired_key_can_be_reused_with_a_different_body(
+    client: TestClient, clock: FakeClock
+) -> None:
+    post_task(client, with_key("alice", "retry-1"), text="first job")
+    clock.advance(hours=25)
+    response = post_task(client, with_key("alice", "retry-1"), text="a different job")
+    assert response.status_code == 202
+
+
+def test_replay_returns_the_task_as_it_is_now(client: TestClient) -> None:
+    task_id = post_task(client, with_key("alice", "retry-1")).json()["id"]
+    client.post(f"/v1/tasks/{task_id}:cancel", headers=as_user("alice"))
+    replay = post_task(client, with_key("alice", "retry-1")).json()
+    assert replay["id"] == task_id
+    assert (
+        replay["state"] == "cancelled"
+    )  # our documented choice (DESIGN.md section 11)
+
+
+def test_read_only_key_with_idempotency_key_is_still_403(client: TestClient) -> None:
+    response = post_task(client, with_key("reader", "retry-1"))
+    assert response.status_code == 403
+
+
+@pytest.mark.parametrize("key", ["", "k" * 256])
+def test_bad_idempotency_key_is_422(client: TestClient, app: FastAPI, key: str) -> None:
+    response = post_task(client, with_key("alice", key))
+    assert response.status_code == 422
+    assert reason(response) == "INVALID_HEADER"
+    tasks: dict[str, Task] = app.state.tasks
+    assert tasks == {}
+
+
+def test_longest_allowed_idempotency_key(client: TestClient) -> None:
+    assert post_task(client, with_key("alice", "k" * 255)).status_code == 202
