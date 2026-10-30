@@ -3,8 +3,8 @@
 | | |
 | --- | --- |
 | Author | Ajay Madhavan Ravichandran |
-| Status | Draft |
-| Version | v1, 28 Oct 2026 |
+| Status | v1 built (in-memory storage); 122 tests passing |
+| Version | v1, 28 Oct 2026; updated 30 Oct 2026 |
 | Code | `labs/week04/` |
 
 ---
@@ -41,6 +41,7 @@ The client sends the work with `POST /v1/tasks` and gets back a task id straight
 - **Multi-tenancy, rate limits, scaling and billing.** These belong with the load, scale and cost work in Phases 3 and 4.
 - **Automatically retrying failed tasks.** The agent may already have acted in the world (restarted a pod), so repeating it may be unsafe. The client decides, by creating a new task.
 
+---
 
 ## 2 · Who calls it, and a walkthrough
 
@@ -62,6 +63,7 @@ Any program that can make an HTTP call can hand the agent some work and follow i
 5. **Something goes wrong.** A second, retried cancel returns **200** with the task unchanged. Cancelling a different task that had already succeeded returns **409** with reason `TASK_ALREADY_FINISHED`. A typo in an id returns **404** with reason `TASK_NOT_FOUND`.
 6. **List.** The bot's daily summary calls `GET /v1/tasks?page_size=20` and gets the 20 newest tasks plus a `next_page_token` for the next 20.
 
+---
 
 ## 3 · Resources and names
 
@@ -79,6 +81,7 @@ The server creates the id, because it alone owns the task's lifecycle, and two c
 **Cancel is not a resource, because:**
 It doesn't represent a thing that exists. It's an action that changes the state of a task. Actions that don't fit the standard methods are custom methods: `POST` with a colon before the verb, `POST /v1/tasks/{task_id}:cancel` (AIP-136).
 
+---
 
 ## 4 · Routes
 
@@ -97,7 +100,7 @@ It doesn't represent a thing that exists. It's an action that changes the state 
 - **Request body:** `CreateTaskRequest`, which is `{"input": "<what the agent should do>"}`. Nothing else is accepted.
 - **Response:** the new `Task`, in state `queued`.
 - **Why 202, not 200 or 201:** the work has been accepted, not done (AIP-151). 200 would suggest the result is ready. 201 says "created", which is true of the ticket, but 202 tells the client the important part: come back later.
-- **Errors:** 422 `INVALID_REQUEST_BODY`; on Thursday also 401, 403 and 422 `IDEMPOTENCY_KEY_REUSED`.
+- **Errors:** 401 `API_KEY_INVALID`, 403 `INSUFFICIENT_PERMISSION`, 422 `INVALID_REQUEST_BODY`, 422 `IDEMPOTENCY_KEY_REUSED`, 422 `INVALID_HEADER`.
 
 ### `GET /v1/tasks/{task_id}`
 
@@ -124,7 +127,7 @@ It doesn't represent a thing that exists. It's an action that changes the state 
 - **Cancelling a task that already succeeded or failed:** 409 `TASK_ALREADY_FINISHED`. The result can't be undone, and the client needs to know cancel didn't happen.
 - **Errors:** 404 `TASK_NOT_FOUND`, 409 `TASK_ALREADY_FINISHED`.
 
-
+---
 
 ## 5 · The task resource
 
@@ -161,7 +164,7 @@ They answer different questions. `task.error` means **the task ran and failed**:
 
 **Times are UTC,** because UTC has no daylight-saving jumps and no ambiguity between servers in different regions. Clients convert to local time for display.
 
-
+---
 
 ## 6 · Task state machine ★
 
@@ -240,9 +243,11 @@ stateDiagram-v2
 - **The worker crashes while running. What state does the task end in, and who notices?** In v1, nothing notices: the task stays `running` forever. The fix is a lease. The worker must keep renewing a short lease on the task, and if the lease expires, the system moves the task to `failed` with code `WORKER_LOST`. Not in v1 (section 14).
 - **A task waits for input forever. Does anything time it out?** Not in v1. The design allows `waiting_for_input` → `failed` with code `INPUT_TIMEOUT` for when a timeout is added (section 14).
 
-
+---
 
 ## 7 · Event stream
+
+> **Status:** designed, not built. The route checks auth and ownership, then returns 501, because nothing produces events until there is a worker (section 14, row 9).
 
 **Format:** each event is sent as `event: <type>`, then `data: <TaskEvent as JSON>`, then a blank line. This is the same SSE format as week 3's `/ask`.
 
@@ -260,7 +265,7 @@ Each `TaskEvent` also carries an `id` (for example `ev_000012`, increasing withi
 - **Reconnecting after a dropped connection:** not in v1. A client that drops calls `GET /v1/tasks/{id}` for the current state, or reopens the stream to get the full replay. Because event ids already increase, `Last-Event-ID` support can be added later without breaking anyone (section 14).
 - **Event order:** guaranteed in creation order within one task. There's no ordering between different tasks.
 
-
+---
 
 ## 8 · Errors
 
@@ -283,7 +288,7 @@ Each `TaskEvent` also carries an `id` (for example `ev_000012`, increasing withi
 
 | Case | Route(s) | HTTP | `status` | `reason` |
 | --- | --- | --- | --- | --- |
-| Route not built yet | all, today only | 501 | `UNIMPLEMENTED` | `NOT_IMPLEMENTED` |
+| Route not built yet | events, until there is a worker | 501 | `UNIMPLEMENTED` | `NOT_IMPLEMENTED` |
 | Task id doesn't exist, or belongs to another key | get, events, cancel | 404 | `NOT_FOUND` | `TASK_NOT_FOUND` |
 | Body fails validation (missing `input`, extra field, too long) | create | 422 | `INVALID_ARGUMENT` | `INVALID_REQUEST_BODY` |
 | `page_size` out of range | list | 422 | `INVALID_ARGUMENT` | `INVALID_QUERY_PARAMETER` |
@@ -292,8 +297,8 @@ Each `TaskEvent` also carries an `id` (for example `ev_000012`, increasing withi
 | Missing or bad API key | all | 401 | `UNAUTHENTICATED` | `API_KEY_INVALID` |
 | Valid key without permission for this action | create, cancel | 403 | `PERMISSION_DENIED` | `INSUFFICIENT_PERMISSION` |
 | Same idempotency key, different body | create | 422 | `INVALID_ARGUMENT` | `IDEMPOTENCY_KEY_REUSED` |
-| `Idempotency-Key` header too long or empty | create | 422 | `INVALID_ARGUMENT` | `INVALID_HEADER` |
-| Unexpected server bug (caught by the `Exception` handler) | all | 500 | `INTERNAL` | `INTERNAL_ERROR` |
+| `Idempotency-Key` header empty or longer than 255 characters | create | 422 | `INVALID_ARGUMENT` | `INVALID_HEADER` |
+| Unexpected server bug (caught by the catch-all `Exception` handler) | all | 500 | `INTERNAL` | `INTERNAL_ERROR` |
 
 Notes on the codes:
 - **422 versus 400.** 422 is for a request the schema rejects (FastAPI's validation). 400 is for a request that's well-formed but makes no sense, such as a page token we didn't issue.
@@ -303,21 +308,72 @@ Notes on the codes:
 
 **Never in an error message:** stack traces, internal hostnames or URLs, SQL, other users' task ids or inputs, or API keys (week 3's rule).
 
-**Known gap:** FastAPI's own 422 validation errors use FastAPI's shape, not this one. Decision: add a `RequestValidationError` handler that converts them to this shape, using `INVALID_REQUEST_BODY` when the error is in the body and `INVALID_QUERY_PARAMETER` when it's in the query. Optional on Wednesday; required by Thursday.
+**How every error reaches this shape** (all in `errors.py`):
 
+| Where the error starts | Handler | Result |
+| --- | --- | --- |
+| Our own code raises an `ApiError` helper | `api_error_handler` | the helper's code, status and reason |
+| FastAPI rejects the request before the route runs | `validation_error_handler` | 422, with the reason picked from the first error's location: `body` gives `INVALID_REQUEST_BODY`, `query` gives `INVALID_QUERY_PARAMETER`, `header` gives `INVALID_HEADER`. The message names the field, never the submitted value |
+| Anything else (a bug) | `unhandled_error_handler` | 500 `INTERNAL_ERROR` with a fixed message. The traceback goes to the server log only |
 
+**Self-check**
+- [x] Every row has all five columns.
+- [x] No two rows share a `reason`.
+- [x] I could explain 400 versus 422 and 401 versus 403.
 
-## 9 · Pagination [THU]
+---
 
-Opaque `page_token` cursor encoding the last item's `created_at` and `id`, newest first (AIP-158). Details on Thursday.
+## 9 · Pagination
 
-## 10 · Authentication [THU]
+`GET /v1/tasks` returns the caller's tasks one page at a time (AIP-158).
 
-API key in a request header, with only hashes stored. 401 for a missing or bad key, 403 for a key without permission, and each key sees only its own tasks. Details on Thursday.
+- **Order:** newest first, sorted by `(created_at, id)`, descending. `id` breaks ties between tasks created at the same moment, so the order is total: every task has exactly one position.
+- **Parameters:** `page_size` (default 20, between 1 and 100) and `page_token` (default `""`, meaning the first page).
+- **The token:** URL-safe base64 of `{"t": <created_at ISO>, "id": <task id>}`, pointing at the last task on the previous page. Clients must treat it as opaque, so its contents can change later.
+- **The next page:** tasks where `(created_at, id)` is less than the cursor. Python compares the tuples position by position, which is exactly the rule.
+- **Knowing whether there is another page:** fetch `page_size + 1` tasks. If the extra one arrives, there is a next page: drop it, and build `next_page_token` from the last task returned. Otherwise `next_page_token` is `""`. With a database this is `LIMIT page_size + 1`, with no separate count query.
+- **Why a cursor and not page numbers:** a task created while someone is paging doesn't shift the later pages, so nothing is shown twice or skipped (tested).
+- **A bad token** (not base64, not JSON, missing keys, a bad date, or a date with no timezone) gives 400 `INVALID_PAGE_TOKEN`. A date without a timezone is rejected because comparing it with our UTC times would raise `TypeError`, which would be a 500.
+- **Not signed:** anyone can decode and edit a token. That only lets a client skip ahead in its own task list, but it's still a gap (section 14).
+- **Code:** `pagination.py` (`encode_cursor`, `decode_cursor`) and `list_tasks` in `api.py`.
 
-## 11 · Idempotency [THU]
+## 10 · Authentication and permissions
 
-An `Idempotency-Key` header on `POST /v1/tasks`, so a client retrying after a dropped connection doesn't create two tasks. Details on Thursday.
+- **Header:** `X-API-Key: sk_...`. FastAPI's `APIKeyHeader` adds an **Authorize** button to `/docs`.
+- **Key format:** `"sk_" + secrets.token_urlsafe(32)`: 32 random bytes from the `secrets` module. The `sk_` prefix makes a leaked key easy to recognise in logs and secret scanners.
+- **What's stored:** only `sha256(key)` as hex, mapped to a `Principal(key_id, scopes)`. A copy of the stored hashes can't be used to call the API.
+- **Why plain SHA-256 and not bcrypt:** bcrypt is deliberately slow to make guessing weak human passwords expensive. These keys are 256 random bits, which can't be guessed, so a fast hash is the right choice.
+- **Generating a key:** `uv run python labs/week04/auth.py` prints a new key and its hash. The key goes in a password manager; only the hash goes in code or config.
+- **Scopes:** `tasks:read` (get, list, events) and `tasks:write` (create, cancel). A read-only key suits a dashboard: if it leaks, nobody can start or stop work with it.
+- **Responses:**
+  - no key, or an unknown key: 401 `API_KEY_INVALID`
+  - a valid key without the route's scope: 403 `INSUFFICIENT_PERMISSION`
+  - another key's task: 404 `TASK_NOT_FOUND`, never 403, so a task's existence never leaks
+- **Isolation:** each task's owner (`key_id`) is stored separately from the task, so it never appears in a response. Get, cancel and events check it; list filters by it.
+- **Code:** `auth.py` (`Principal`, `hash_key`, `new_key`, the scope names) and `principal`, `require` and `owned` inside `create_app`.
+
+## 11 · Idempotency
+
+**The problem:** a client sends `POST /v1/tasks`, and the connection drops before the 202 arrives. The client can't tell whether the task was created, so it retries. Without protection that starts two agents doing the same work, possibly two rollbacks. This is the week 3 lesson about retries, seen from the server side.
+
+- **Header:** an optional `Idempotency-Key`, between 1 and 255 characters (otherwise 422 `INVALID_HEADER`).
+- **What's remembered:** an `IdempotencyRecord(fingerprint, task_id, created_at)`, stored under `(key_id, idempotency key)`.
+- **Scoped per API key:** two clients that happen to use the same idempotency key get separate tasks. Without this, one client could receive the other's task, which would be a data leak.
+- **Fingerprint:** SHA-256 of the **parsed** body as JSON with sorted keys, so spacing and key order don't count as a different body.
+
+| Situation | Response |
+| --- | --- |
+| No header | created normally; no protection |
+| A key not seen before (or expired) | created, and the record is stored |
+| Same key and same body, within 24 hours | the stored task, 202, with `Idempotent-Replayed: true`; nothing is created |
+| Same key and a different body | 422 `IDEMPOTENCY_KEY_REUSED`; almost certainly a client bug, so we never guess |
+| Same key after more than 24 hours | treated as new; the new task replaces the old record |
+
+- **Expiry:** 24 hours, inclusive (`<=`), checked lazily when a key is looked up. Tests move an injected clock forward instead of sleeping.
+- **A replay returns the task as it is now**, not a snapshot of the first response. If the task has been cancelled since, the replay shows `cancelled`. Replaying the original snapshot is also a valid design, and is what some payment APIs do; we chose the current state because it's what a client retrying a create most needs to know.
+- **Order of checks:** authentication and permissions run first, so a read-only key gets 403 even with an idempotency key.
+- **Concurrency:** two identical requests at the same moment are safe here, because there is no `await` between the lookup and the write. A database needs a unique constraint on `(key_id, idempotency_key)` instead (section 14).
+- **Code:** `idempotency.py` (`TTL`, `IdempotencyRecord`, `fingerprint`) and the top and bottom of `create_task` in `api.py`.
 
 ---
 
@@ -356,9 +412,29 @@ An `Idempotency-Key` header on `POST /v1/tasks`, so a client retrying after a dr
 | 2 | A crashed worker leaves a task `running` forever | Add a worker lease, then move to `failed` with `WORKER_LOST` when it expires | With the worker, Phase 2 |
 | 3 | `waiting_for_input` has no timeout | Add a timeout, then move to `failed` with `INPUT_TIMEOUT` | With the reply route |
 | 4 | No stream resume with `Last-Event-ID` | Event ids already increase, so it can be added without a breaking change | Later, if clients need it |
-| 5 | FastAPI's 422s use their own shape | Add a `RequestValidationError` handler | Thursday at the latest |
+| 5 | FastAPI's 422s use their own shape | **Done:** `validation_error_handler` in `errors.py` | Done 29 Oct |
 | 6 | Cancel versus success race | Check-and-set on every state change; first write wins | Saturday's service layer |
 | 7 | Concurrency and rate limits | 429 `RESOURCE_EXHAUSTED` with `Retry-After` | Phase 3 or 4 |
 | 8 | Adding a new state is breaking | Treat it as a `/v2` change, or first document "unknown states are non-terminal" | Before any new state |
+| 9 | The events route returns 501 | Nothing produces events until there is a worker | With the worker, Phase 2 |
+| 10 | Page tokens aren't signed | Add an HMAC signature, checked with `hmac.compare_digest`, so an edited token gives 400 | When tokens carry anything sensitive, or before production |
+| 11 | Two identical idempotent creates on a database could both insert | A unique constraint on `(key_id, idempotency_key)`, with the loser returning the winner's task | With the database (week 5 onwards) |
+| 12 | All data is in memory and lost on restart | Saturday puts storage behind a repository interface; a database comes later | Saturday 31 Oct, then week 5 |
+| 13 | Expired idempotency records are never deleted, only ignored | A periodic clean-up, or a database TTL | With the database |
+| 14 | API keys are passed into `create_app`, with no way to add or revoke one while running | Load keys from settings or a key store, with a revoke list | Before anyone else uses it |
 
 ---
+
+## Where the code is
+
+| File | What it holds |
+| --- | --- |
+| `models.py` | `TaskState`, `TERMINAL`, `ALLOWED`, `can_transition`, and the request, task, list, event and error models |
+| `errors.py` | `ApiError`, one helper per reason in 8b, and the three error handlers |
+| `auth.py` | `Principal`, `hash_key`, `new_key`, and the scope names |
+| `pagination.py` | `encode_cursor`, `decode_cursor` |
+| `idempotency.py` | `TTL`, `IdempotencyRecord`, `fingerprint` |
+| `api.py` | `create_app`: the in-memory stores, auth dependencies and the five routes |
+| `serve.py` | runs the app on port 8000 with one dev key |
+| `openapi.json` | the generated contract |
+| `test_models.py`, `test_api.py`, `test_pagination.py`, `test_idempotency.py` | 122 tests |
