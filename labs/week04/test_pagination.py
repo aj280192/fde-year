@@ -3,18 +3,18 @@
 from datetime import UTC, datetime
 
 import pytest
-from errors import ApiError
-from pagination import decode_cursor, encode_cursor
+from api.errors import ApiError
+from api.pagination import decode_cursor, encode_cursor
 
 WHEN = datetime(2026, 10, 30, 21, 15, 30, 123456, tzinfo=UTC)
 
 
 def test_round_trip() -> None:
-    assert decode_cursor(encode_cursor(WHEN, "t_abc")) == (WHEN, "t_abc")
+    assert decode_cursor(encode_cursor((WHEN, "t_abc"))) == (WHEN, "t_abc")
 
 
 def test_token_is_url_safe() -> None:
-    token = encode_cursor(WHEN, "t_" + "?/+" * 10)
+    token = encode_cursor((WHEN, "t_" + "?/+" * 10))
     assert not set(token) & set("+/ ")  # safe to put in a query string unescaped
 
 

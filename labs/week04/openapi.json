@@ -51,7 +51,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Task"
+                  "$ref": "#/components/schemas/TaskOut"
                 }
               }
             }
@@ -202,7 +202,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Task"
+                  "$ref": "#/components/schemas/TaskOut"
                 }
               }
             }
@@ -277,7 +277,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Task"
+                  "$ref": "#/components/schemas/TaskOut"
                 }
               }
             }
@@ -510,7 +510,7 @@
         "properties": {
           "tasks": {
             "items": {
-              "$ref": "#/components/schemas/Task"
+              "$ref": "#/components/schemas/TaskOut"
             },
             "type": "array",
             "title": "Tasks"
@@ -527,7 +527,25 @@
         ],
         "title": "ListTasksResponse"
       },
-      "Task": {
+      "TaskErrorOut": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "TaskErrorOut"
+      },
+      "TaskOut": {
         "properties": {
           "id": {
             "type": "string",
@@ -554,7 +572,7 @@
           "error": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/TaskError"
+                "$ref": "#/components/schemas/TaskErrorOut"
               },
               {
                 "type": "null"
@@ -580,25 +598,7 @@
           "created_at",
           "updated_at"
         ],
-        "title": "Task"
-      },
-      "TaskError": {
-        "properties": {
-          "code": {
-            "type": "string",
-            "title": "Code"
-          },
-          "message": {
-            "type": "string",
-            "title": "Message"
-          }
-        },
-        "type": "object",
-        "required": [
-          "code",
-          "message"
-        ],
-        "title": "TaskError"
+        "title": "TaskOut"
       },
       "TaskState": {
         "type": "string",

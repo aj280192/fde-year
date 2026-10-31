@@ -6,10 +6,17 @@ bottom turn them, and FastAPI's own validation errors and unexpected bugs, into 
 
 import logging
 
+from domain.errors import (
+    DomainError,
+    IdempotencyKeyReused,
+    TaskAlreadyFinished,
+    TaskNotFound,
+)
 from fastapi import Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from models import ErrorBody, ErrorDetail, ErrorResponse, TaskState
+
+from api.schemas import ErrorBody, ErrorDetail, ErrorResponse
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +30,19 @@ class ApiError(Exception):
         self.status = status
         self.reason = reason
         self.message = message
+
+
+def from_domain(err: DomainError) -> ApiError:
+    """The one place that knows both sides: a business-rule failure becomes an HTTP error."""
+    match err:
+        case TaskNotFound():
+            return task_not_found(err.task_id)
+        case TaskAlreadyFinished():
+            return task_already_finished(err.task_id, err.state)
+        case IdempotencyKeyReused():
+            return idempotency_key_reused()
+        case _:
+            return internal_error()  # a new DomainError nobody mapped: a bug
 
 
 # ---- Raised by routes ----
@@ -47,12 +67,12 @@ def task_not_found(task_id: str) -> ApiError:
     )
 
 
-def task_already_finished(task_id: str, state: TaskState) -> ApiError:
+def task_already_finished(task_id: str, state: str) -> ApiError:
     return ApiError(
         http=409,
         status="FAILED_PRECONDITION",
         reason="TASK_ALREADY_FINISHED",
-        message=f"Task '{task_id}' is already {state.value} and can no longer be cancelled.",
+        message=f"Task '{task_id}' is already {state} and can no longer be cancelled.",
     )
 
 
@@ -150,6 +170,11 @@ def to_response(err: ApiError) -> JSONResponse:
     return JSONResponse(status_code=err.http, content=body.model_dump())
 
 
+async def domain_error_handler(_: Request, exc: DomainError) -> JSONResponse:
+    """Business-rule failures raised by the services."""
+    return to_response(from_domain(exc))
+
+
 async def api_error_handler(_: Request, exc: ApiError) -> JSONResponse:
     """Errors our own code raised."""
     return to_response(exc)
@@ -174,6 +199,6 @@ async def validation_error_handler(
 
 
 async def unhandled_error_handler(_: Request, exc: Exception) -> JSONResponse:
-    """An unexpect bug. Full details go to the server log; the client gets a generic 500."""
+    """An unexpected bug. Full details go to the server log; the client gets a generic 500."""
     logger.exception("Unhandled error", exc_info=exc)
     return to_response(internal_error())

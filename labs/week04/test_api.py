@@ -1,15 +1,17 @@
 """Step 6: the task routes and API-key auth, end to end through FastAPI's TestClient."""
 
 from collections.abc import Mapping
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import Any, Protocol
 
 import pytest
-from api import create_app
-from auth import READ, WRITE, Principal, hash_key
+from api.app import create_app
+from api.auth import READ, WRITE, Principal, hash_key
+from domain.task import TaskState
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from models import Task, TaskState
+from repository import TaskRepository
 
 # Raw test keys. Real keys come from auth.py's new_key(); simple strings are fine in tests.
 KEYS = {"alice": "sk_test_alice", "bob": "sk_test_bob", "reader": "sk_test_reader"}
@@ -69,6 +71,12 @@ class TaskResponse(JsonResponse, Protocol):
 
     @property
     def headers(self) -> Mapping[str, str]: ...
+
+
+def stored(app: FastAPI, owner: str = "alice") -> int:
+    """How many tasks the owner has in the app's repository."""
+    repo: TaskRepository = app.state.repo
+    return len(repo.list_for_owner(owner, before=None, limit=1000))
 
 
 def reason(response: JsonResponse) -> str:
@@ -150,13 +158,16 @@ def test_cancel_finished_task_is_409(
 ) -> None:
     task_id = create(client)
     # No route can finish a task yet (there is no worker), so put one in the store directly.
-    tasks: dict[str, Task] = app.state.tasks
-    tasks[task_id] = tasks[task_id].model_copy(update={"state": finished})
+    repo: TaskRepository = app.state.repo
+    task = repo.get(task_id, "alice")
+    assert task is not None
+    repo.save(replace(task, state=finished))
 
     response = client.post(f"/v1/tasks/{task_id}:cancel", headers=as_user("alice"))
     assert response.status_code == 409
     assert reason(response) == "TASK_ALREADY_FINISHED"
-    assert tasks[task_id].state is finished  # unchanged
+    unchanged = repo.get(task_id, "alice")
+    assert unchanged is not None and unchanged.state is finished
 
 
 def test_events_is_not_implemented_yet(client: TestClient) -> None:
@@ -204,8 +215,7 @@ def test_read_only_key_cannot_create(client: TestClient, app: FastAPI) -> None:
     response = client.post("/v1/tasks", json={"input": "x"}, headers=as_user("reader"))
     assert response.status_code == 403
     assert reason(response) == "INSUFFICIENT_PERMISSION"
-    tasks: dict[str, Task] = app.state.tasks
-    assert tasks == {}  # nothing was created
+    assert stored(app, "reader") == 0  # nothing was created
 
 
 def test_read_only_key_cannot_cancel(client: TestClient) -> None:
@@ -419,8 +429,7 @@ def test_same_key_same_body_returns_the_first_task(
     assert second.json() == first.json()
     assert second.headers["Idempotent-Replayed"] == "true"
     assert "Idempotent-Replayed" not in first.headers
-    tasks: dict[str, Task] = app.state.tasks
-    assert len(tasks) == 1  # the retry created nothing
+    assert stored(app) == 1  # the retry created nothing
 
 
 def test_same_key_different_body_is_rejected(client: TestClient, app: FastAPI) -> None:
@@ -428,8 +437,7 @@ def test_same_key_different_body_is_rejected(client: TestClient, app: FastAPI) -
     response = post_task(client, with_key("alice", "retry-1"), text="Delete everything")
     assert response.status_code == 422
     assert reason(response) == "IDEMPOTENCY_KEY_REUSED"
-    tasks: dict[str, Task] = app.state.tasks
-    assert len(tasks) == 1
+    assert stored(app) == 1
 
 
 def test_same_key_from_two_clients_makes_two_tasks(client: TestClient) -> None:
@@ -449,8 +457,7 @@ def test_different_keys_make_different_tasks(client: TestClient) -> None:
 def test_no_key_means_no_protection(client: TestClient, app: FastAPI) -> None:
     post_task(client, as_user("alice"))
     post_task(client, as_user("alice"))
-    tasks: dict[str, Task] = app.state.tasks
-    assert len(tasks) == 2
+    assert stored(app) == 2
 
 
 def test_key_still_works_at_exactly_24_hours(
@@ -501,8 +508,7 @@ def test_bad_idempotency_key_is_422(client: TestClient, app: FastAPI, key: str) 
     response = post_task(client, with_key("alice", key))
     assert response.status_code == 422
     assert reason(response) == "INVALID_HEADER"
-    tasks: dict[str, Task] = app.state.tasks
-    assert tasks == {}
+    assert stored(app) == 0
 
 
 def test_longest_allowed_idempotency_key(client: TestClient) -> None:

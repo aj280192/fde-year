@@ -9,15 +9,18 @@ import binascii
 import json
 from datetime import datetime
 
-from errors import invalid_page_token
+from repository import Cursor
+
+from api.errors import invalid_page_token
 
 
-def encode_cursor(created_at: datetime, task_id: str) -> str:
+def encode_cursor(cursor: Cursor) -> str:
+    created_at, task_id = cursor
     payload = json.dumps({"t": created_at.isoformat(), "id": task_id}).encode()
     return base64.urlsafe_b64encode(payload).decode()
 
 
-def decode_cursor(token: str) -> tuple[datetime, str]:
+def decode_cursor(token: str) -> Cursor:
     """The (created_at, id) a token points at. Any problem with the token gives 400."""
     try:
         data = json.loads(base64.urlsafe_b64decode(token.encode()))

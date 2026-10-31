@@ -1,10 +1,10 @@
-"""The task state machine (DESIGN.md section 6) and the request and task models."""
+"""The task state machine (DESIGN.md section 6) and the create-request schema."""
 
-from datetime import UTC, datetime
 from itertools import product
 
 import pytest
-from models import ALLOWED, TERMINAL, CreateTaskRequest, Task, TaskState, can_transition
+from api.schemas import CreateTaskRequest
+from domain.task import ALLOWED, TERMINAL, TaskState, can_transition
 from pydantic import ValidationError
 
 S = TaskState
@@ -119,30 +119,3 @@ def test_longest_allowed_input() -> None:
     assert (
         len(CreateTaskRequest.model_validate({"input": "x" * 10_000}).input) == 10_000
     )
-
-
-# ---- Task ----
-
-
-def make_task() -> Task:
-    stamp = datetime(2026, 10, 29, 12, 0, tzinfo=UTC)
-    return Task(id="t_1", state=S.QUEUED, input="x", created_at=stamp, updated_at=stamp)
-
-
-def test_task_is_frozen() -> None:
-    task = make_task()
-    with pytest.raises(ValidationError):
-        task.state = S.CANCELLED  # pydantic refuses this at runtime
-
-
-def test_model_copy_makes_a_new_task_and_keeps_the_old_one() -> None:
-    task = make_task()
-    cancelled = task.model_copy(update={"state": S.CANCELLED})
-    assert cancelled.state is S.CANCELLED
-    assert task.state is S.QUEUED
-
-
-def test_new_task_has_no_result_and_no_error() -> None:
-    task = make_task()
-    assert task.result is None
-    assert task.error is None
