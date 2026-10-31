@@ -3,8 +3,8 @@
 | | |
 | --- | --- |
 | Author | Ajay Madhavan Ravichandran |
-| Status | v1 built (in-memory storage); 122 tests passing |
-| Version | v1, 28 Oct 2026; updated 30 Oct 2026 |
+| Status | v1 built and layered (in-memory storage); 167 tests passing |
+| Version | v1, 28 Oct 2026; updated 30 and 31 Oct 2026 |
 | Code | `labs/week04/` |
 
 ---
@@ -335,7 +335,7 @@ Notes on the codes:
 - **Why a cursor and not page numbers:** a task created while someone is paging doesn't shift the later pages, so nothing is shown twice or skipped (tested).
 - **A bad token** (not base64, not JSON, missing keys, a bad date, or a date with no timezone) gives 400 `INVALID_PAGE_TOKEN`. A date without a timezone is rejected because comparing it with our UTC times would raise `TypeError`, which would be a 500.
 - **Not signed:** anyone can decode and edit a token. That only lets a client skip ahead in its own task list, but it's still a gap (section 14).
-- **Code:** `pagination.py` (`encode_cursor`, `decode_cursor`) and `list_tasks` in `api.py`.
+- **Code:** the cursor rule (`page_size + 1`, the last task returned) is in `services.list_tasks`; the ordering and filtering are in `repository.list_for_owner`; turning a cursor into a token is `api/pagination.py`.
 
 ## 10 · Authentication and permissions
 
@@ -350,7 +350,7 @@ Notes on the codes:
   - a valid key without the route's scope: 403 `INSUFFICIENT_PERMISSION`
   - another key's task: 404 `TASK_NOT_FOUND`, never 403, so a task's existence never leaks
 - **Isolation:** each task's owner (`key_id`) is stored separately from the task, so it never appears in a response. Get, cancel and events check it; list filters by it.
-- **Code:** `auth.py` (`Principal`, `hash_key`, `new_key`, the scope names) and `principal`, `require` and `owned` inside `create_app`.
+- **Code:** `api/auth.py` (`Principal`, `hash_key`, `new_key`, the scope names) and `principal` and `require` inside `create_app`. Ownership is enforced by the repository: `get(task_id, owner)` returns nothing for another key's task.
 
 ## 11 · Idempotency
 
@@ -373,7 +373,7 @@ Notes on the codes:
 - **A replay returns the task as it is now**, not a snapshot of the first response. If the task has been cancelled since, the replay shows `cancelled`. Replaying the original snapshot is also a valid design, and is what some payment APIs do; we chose the current state because it's what a client retrying a create most needs to know.
 - **Order of checks:** authentication and permissions run first, so a read-only key gets 403 even with an idempotency key.
 - **Concurrency:** two identical requests at the same moment are safe here, because there is no `await` between the lookup and the write. A database needs a unique constraint on `(key_id, idempotency_key)` instead (section 14).
-- **Code:** `idempotency.py` (`TTL`, `IdempotencyRecord`, `fingerprint`) and the top and bottom of `create_task` in `api.py`.
+- **Code:** the rule is in `domain/idempotency.py` (`TTL`, `IdempotencyRecord`, `fingerprint`) and `services.create_task`; the records are stored by the repository; only the header and the `Idempotent-Replayed` reply are in `api/app.py`.
 
 ---
 
@@ -413,28 +413,68 @@ Notes on the codes:
 | 3 | `waiting_for_input` has no timeout | Add a timeout, then move to `failed` with `INPUT_TIMEOUT` | With the reply route |
 | 4 | No stream resume with `Last-Event-ID` | Event ids already increase, so it can be added without a breaking change | Later, if clients need it |
 | 5 | FastAPI's 422s use their own shape | **Done:** `validation_error_handler` in `errors.py` | Done 29 Oct |
-| 6 | Cancel versus success race | Check-and-set on every state change; first write wins | Saturday's service layer |
+| 6 | Cancel versus success race | Check-and-set on every state change; first write wins. It now has one home: `services.cancel_task` reads, `Task.cancel` decides, `repository.save` writes. With Postgres, `save` becomes a conditional `UPDATE ... WHERE id = ... AND state = <state read>`, and zero rows updated means someone else won | With the database (week 5 onwards) |
 | 7 | Concurrency and rate limits | 429 `RESOURCE_EXHAUSTED` with `Retry-After` | Phase 3 or 4 |
 | 8 | Adding a new state is breaking | Treat it as a `/v2` change, or first document "unknown states are non-terminal" | Before any new state |
 | 9 | The events route returns 501 | Nothing produces events until there is a worker | With the worker, Phase 2 |
 | 10 | Page tokens aren't signed | Add an HMAC signature, checked with `hmac.compare_digest`, so an edited token gives 400 | When tokens carry anything sensitive, or before production |
 | 11 | Two identical idempotent creates on a database could both insert | A unique constraint on `(key_id, idempotency_key)`, with the loser returning the winner's task | With the database (week 5 onwards) |
-| 12 | All data is in memory and lost on restart | Saturday puts storage behind a repository interface; a database comes later | Saturday 31 Oct, then week 5 |
+| 12 | All data is in memory and lost on restart | **Storage is now behind `TaskRepository`** (done 31 Oct). A Postgres repository implements the same protocol and must pass `test_repository.py` | Week 5 onwards |
 | 13 | Expired idempotency records are never deleted, only ignored | A periodic clean-up, or a database TTL | With the database |
 | 14 | API keys are passed into `create_app`, with no way to add or revoke one while running | Load keys from settings or a key store, with a revoke list | Before anyone else uses it |
 
 ---
 
+## Layers
+
+Added 31 Oct 2026, after *Architecture Patterns with Python* ch. 1 to 4.
+
+```text
+api/           HTTP only: parse the request, check the key, call a service, shape the reply
+   │ calls
+services.py    use cases: create, get, cancel, list. Plain values in, domain objects out
+   │ uses
+repository.py  storage behind the TaskRepository protocol (in memory today, Postgres later)
+   │ stores
+domain/        the task and its rules, in plain Python
+```
+
+**The rule:** each layer imports only the layers below it. `domain/` imports nothing but the standard library: no FastAPI, Pydantic or database library. `test_architecture.py` reads every file's imports and fails if the rule is broken.
+
+**How an error travels:** a service raises a `DomainError` (for example `TaskNotFound`). The routes don't catch it. `domain_error_handler` in `api/errors.py` maps it to an `ApiError`, and from there to the one error shape. `api/errors.py` is the only file that knows both a domain error and an HTTP code.
+
+**Why it's worth it:**
+
+| Benefit | Evidence |
+| --- | --- |
+| The rules are tested without HTTP, in milliseconds | `test_domain.py` and `test_services.py` use no `TestClient` |
+| Swapping storage changes one file | services depend on the `TaskRepository` protocol, never on the in-memory class |
+| The JSON shape can change without touching the rules | `TaskOut.from_domain` is the only bridge; the domain `Task` is a plain dataclass |
+| The public API didn't change during the refactor | every HTTP test passed with only import and setup changes; `openapi.json` changed only in two schema names (`Task` became `TaskOut`, `TaskError` became `TaskErrorOut`) |
+
 ## Where the code is
 
-| File | What it holds |
-| --- | --- |
-| `models.py` | `TaskState`, `TERMINAL`, `ALLOWED`, `can_transition`, and the request, task, list, event and error models |
-| `errors.py` | `ApiError`, one helper per reason in 8b, and the three error handlers |
-| `auth.py` | `Principal`, `hash_key`, `new_key`, and the scope names |
-| `pagination.py` | `encode_cursor`, `decode_cursor` |
-| `idempotency.py` | `TTL`, `IdempotencyRecord`, `fingerprint` |
-| `api.py` | `create_app`: the in-memory stores, auth dependencies and the five routes |
-| `serve.py` | runs the app on port 8000 with one dev key |
-| `openapi.json` | the generated contract |
-| `test_models.py`, `test_api.py`, `test_pagination.py`, `test_idempotency.py` | 122 tests |
+| File | Layer | What it holds |
+| --- | --- | --- |
+| `domain/task.py` | domain | `TaskState`, `TERMINAL`, `ALLOWED`, `can_transition`, `TaskError`, and `Task` with its `cancel` rule |
+| `domain/errors.py` | domain | `DomainError`, `TaskNotFound`, `TaskAlreadyFinished`, `IdempotencyKeyReused` (no HTTP codes) |
+| `domain/idempotency.py` | domain | `TTL`, `IdempotencyRecord`, `fingerprint` |
+| `repository.py` | storage | the `TaskRepository` protocol, `Cursor`, and `InMemoryTaskRepository` |
+| `services.py` | use cases | `create_task`, `get_task`, `cancel_task`, `list_tasks`, and their `Created` and `Page` results |
+| `api/app.py` | HTTP | `create_app`: auth dependencies and the five thin routes |
+| `api/schemas.py` | HTTP | the Pydantic request and response shapes, including `TaskOut.from_domain` |
+| `api/errors.py` | HTTP | `ApiError`, one helper per reason in 8b, the domain-to-HTTP mapping, and four error handlers |
+| `api/auth.py` | HTTP | `Principal`, `hash_key`, `new_key`, the scope names |
+| `api/pagination.py` | HTTP | `encode_cursor`, `decode_cursor` (a cursor tuple to and from a token) |
+| `serve.py` | | runs the app on port 8000, with the key's hash from `TASKS_API_KEY_HASH` |
+| `openapi.json` | | the generated contract |
+
+| Tests | What they cover | Count |
+| --- | --- | --- |
+| `test_domain.py` | the domain `Task` and `cancel` | 9 |
+| `test_models.py` | the state machine (all 36 pairs) and `CreateTaskRequest` | 59 |
+| `test_repository.py` | the in-memory repository; a Postgres one must pass the same tests | 12 |
+| `test_services.py` | the use cases, with no HTTP | 20 |
+| `test_api.py` | every route end to end through `TestClient` | 53 |
+| `test_pagination.py`, `test_idempotency.py` | the token and fingerprint helpers | 6 |
+| `test_architecture.py` | the layer rule | 8 |
