@@ -3,8 +3,8 @@
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from domain.idempotency import IdempotencyRecord
 from domain.task import Task, TaskState
-from idempotency import IdempotencyRecord
 from repository import InMemoryTaskRepository, TaskRepository
 
 T0 = datetime(2026, 10, 31, 12, 0, tzinfo=UTC)

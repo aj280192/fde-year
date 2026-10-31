@@ -7,8 +7,8 @@ nothing above this file changes.
 from datetime import datetime
 from typing import Protocol
 
+from domain.idempotency import IdempotencyRecord
 from domain.task import Task
-from idempotency import IdempotencyRecord
 
 # A position in "newest first" order: (created_at, task id). Tasks strictly before it come next.
 Cursor = tuple[datetime, str]
