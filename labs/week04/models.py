@@ -1,44 +1,11 @@
 from datetime import datetime
-from enum import StrEnum
 from typing import Literal
 
+# Step 3: the rules now live in the domain. Re-exported here so nothing else has to change yet.
+from domain.task import ALLOWED, TERMINAL, TaskState, can_transition
 from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
-
-class TaskState(StrEnum):
-    QUEUED = "queued"
-    RUNNING = "running"
-    WAITING_FOR_INPUT = "waiting_for_input"
-    SUCCEEDED = "succeeded"
-    FAILED = "failed"
-    CANCELLED = "cancelled"
-
-
-TERMINAL = frozenset({TaskState.SUCCEEDED, TaskState.CANCELLED, TaskState.FAILED})
-
-ALLOWED: dict[TaskState, frozenset[TaskState]] = {
-    TaskState.QUEUED: frozenset(
-        {TaskState.RUNNING, TaskState.FAILED, TaskState.CANCELLED}
-    ),
-    TaskState.RUNNING: frozenset(
-        {
-            TaskState.WAITING_FOR_INPUT,
-            TaskState.SUCCEEDED,
-            TaskState.FAILED,
-            TaskState.CANCELLED,
-        }
-    ),
-    TaskState.WAITING_FOR_INPUT: frozenset(
-        {TaskState.RUNNING, TaskState.FAILED, TaskState.CANCELLED}
-    ),
-    TaskState.SUCCEEDED: frozenset(),
-    TaskState.CANCELLED: frozenset(),
-    TaskState.FAILED: frozenset(),
-}
-
-
-def can_transition(old: TaskState, new: TaskState) -> bool:
-    return new in ALLOWED[old]
+__all__ = ["ALLOWED", "TERMINAL", "TaskState", "can_transition"]
 
 
 class CreateTaskRequest(BaseModel):
@@ -64,7 +31,7 @@ class Task(BaseModel):
 
 class ListTasksResponse(BaseModel):
     tasks: list[Task]
-    next_page_token: str = ""  # empty token means last page
+    next_page_token: str = ""
 
 
 class TaskEvent(BaseModel):
