@@ -8,3 +8,8 @@ date,prompt,type,result,minutes,time_complexity,space_complexity,what_blocked_me
 2026-10-19,Longest Substring Without Repeating Characters (LC 3),coding,not solved,25,,,"blocked: could not think of a sliding window approach; redo unaided before reading a solution"
 2026-10-26,LC20 Valid Parentheses,stack,solved unaided,20,O(n),O(n),"none; used a closer-to-opener map and a '#' placeholder for an empty stack"
 2026-10-26,LC155 Min Stack,stack design,solved unaided,35,O(1) per operation,O(n),"none; stored (value, min so far) per entry so pop never recomputes the min"
+2026-11-02,LC584 Find Customer Referee,sql select,solved,2,-,-,"it was a simple select with a where clause; I had to remember to use the correct table and column names"
+2026-11-02,LC1683 Invalid Tweets,sql select,solved,5,-,-,"I had to think about how to filter out invalid tweets based on the given criteria"
+2026-11-02,LC1581 Customer Who Visited but Did Not Make Any Transactions,sql join,solved aided,5,-,-,"I had to remember left joint, count, and group by to find customers who visited but did not make any transactions"
+2026-11-02,LC197 Rising Temperature,sql self-join,solved aided,5,-,-,"I tried with lag which cuaused issue with missing previous rows; I had to search and switch to a self-join with datadiff = 1 to get the correct results"
+2026-11-02,LC1280 Students and Examinations,sql join,unsolved,10,-,-,"I was blocked by not knowing cross join and how to use it to generate all combinations of students and exams; I need to review cross join and practice more"
