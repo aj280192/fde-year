@@ -5,10 +5,13 @@ description = "This repository documents my technical roadmap and project milest
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "alembic>=1.20.1",
     "asyncio>=4.0.0",
     "fastapi[standard]>=0.142.2",
     "httpx>=0.28.1",
+    "psycopg[binary]>=3.3.8",
     "pydantic-settings>=2.15.0",
+    "sqlalchemy>=2.1.8",
 ]
 
 [dependency-groups]
