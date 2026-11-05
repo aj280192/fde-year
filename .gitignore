@@ -219,3 +219,4 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 node_modules/
+capstones/05-health-rag/data/

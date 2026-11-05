@@ -9,6 +9,7 @@ dependencies = [
     "asyncio>=4.0.0",
     "fastapi[standard]>=0.142.2",
     "httpx>=0.28.1",
+    "openpyxl>=3.1.5",
     "psycopg[binary]>=3.3.8",
     "pydantic-settings>=2.15.0",
     "sqlalchemy>=2.1.8",
@@ -21,6 +22,7 @@ dev = [
     "pyright>=1.1.414",
     "pytest>=9.1.1",
     "ruff>=0.16.10",
+    "types-openpyxl>=3.1.5.20261017",
 ]
 
 [tool.pyright]
