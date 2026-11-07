@@ -1,7 +1,7 @@
 """Run the task API on localhost:8000 with one dev key.
 
-uv run python labs/week04/auth.py     # once: prints a new key and its hash
-TASKS_API_KEY_HASH=<hash> uv run python labs/week04/serve.py
+uv run python labs/week05/auth.py     # once: prints a new key and its hash
+TASKS_API_KEY_HASH=<hash> uv run python labs/week05/serve.py
 """
 
 import os

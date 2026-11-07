@@ -413,19 +413,18 @@ Notes on the codes:
 | 3 | `waiting_for_input` has no timeout | Add a timeout, then move to `failed` with `INPUT_TIMEOUT` | With the reply route |
 | 4 | No stream resume with `Last-Event-ID` | Event ids already increase, so it can be added without a breaking change | Later, if clients need it |
 | 5 | FastAPI's 422s use their own shape | **Done:** `validation_error_handler` in `errors.py` | Done 29 Oct |
- the later commit overwrote a cancel with `succeeded`, an illegal move. `SELECT … FOR UPDATE` prevents it, but only if the lock covers the read, the check and the write in one transaction; in this code the read and check are in the service and the write in `save`, in different transactions. Decision to make: a conditional update (`UPDATE … WHERE id = :id AND state = :expected`; zero rows means a conflict) or a unit of work across the service call (*Architecture Patterns* ch. 6) | Before a worker exists (Phase 2) |
+| 6 | Cancel versus success race | **Shown for real on 5 Nov:** two `psql` sessions both read `running`, and the later commit overwrote a cancel with `succeeded`, an illegal move. `SELECT … FOR UPDATE` prevents it, but only if the lock covers the read, the check and the write in one transaction; in this code the read and check are in the service and the write in `save`, in different transactions. Decision to make: a conditional update (`UPDATE … WHERE id = :id AND state = :expected`; zero rows means a conflict) or a unit of work across the service call (*Architecture Patterns* ch. 6) | Before a worker exists (Phase 2) |
 | 7 | Concurrency and rate limits | 429 `RESOURCE_EXHAUSTED` with `Retry-After` | Phase 3 or 4 |
 | 8 | Adding a new state is breaking | Treat it as a `/v2` change, or first document "unknown states are non-terminal" | Before any new state |
 | 9 | The events route returns 501 | Nothing produces events until there is a worker | With the worker, Phase 2 |
 | 10 | Page tokens aren't signed | Add an HMAC signature, checked with `hmac.compare_digest`, so an edited token gives 400 | When tokens carry anything sensitive, or before production |
 | 11 | Two identical idempotent creates on a database could both insert | **Done 5 Nov:** `idempotency_keys` has primary key `(tenant_id, key)`. Still to do: when the insert of the record loses that race, return the winner's task instead of an error | Record: done. Race handling: with the worker |
 | 12 | All data is in memory and lost on restart | **Done 5 Nov:** storage is Postgres, behind the same protocol; in-memory kept for fast tests | Done |
-| 13 | Expired idempotency records are never deleted, only ignored | A periodic clean-up, or a database TTL | With the database |
-| 14 | API keys are passed into `create_app`, with no way to add or revoke one while running | Load keys from settings or a key store, with a revoke list | Before anyone else uses it |
-| 15 | The Postgres repository is synchronous, so a database call blocks the event loop while it waits | An async repository (`AsyncEngine`, psycopg's async mode); the protocol's methods and the services become `async def` at the same time | Before load testing (Phase 4) |
-| 16 | `add` creates a missing tenant row | Tenants created by an admin API, and `add` refusing an unknown tenant | With multi-tenancy (capstone 3) |
-| 17 | Expired idempotency records stay in the table | A periodic `DELETE … WHERE created_at < now() - interval '24 hours'` | Before production |
-| 18 | `runs` and `tool_calls` exist but nothing writes them | The worker records each attempt and each tool call | Phase 2 (capstone 1) |
+| 13 | API keys are passed into `create_app`, with no way to add or revoke one while running | Load keys from settings or a key store, with a revoke list | Before anyone else uses it |
+| 14 | The Postgres repository is synchronous, so a database call blocks the event loop while it waits | An async repository (`AsyncEngine`, psycopg's async mode); the protocol's methods and the services become `async def` at the same time | Before load testing (Phase 4) |
+| 15 | `add` creates a missing tenant row | Tenants created by an admin API, and `add` refusing an unknown tenant | With multi-tenancy (capstone 3) |
+| 16 | Expired idempotency records stay in the table | A periodic `DELETE … WHERE created_at < now() - interval '24 hours'` | Before production |
+| 17 | `runs` and `tool_calls` exist but nothing writes them | The worker records each attempt and each tool call | Phase 2 (capstone 1) |
 
 ---
 
