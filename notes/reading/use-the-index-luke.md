@@ -70,7 +70,7 @@ On a 50,000-row `tasks` table, in Postgres 17 (Docker, `pgvector/pgvector:pg17`)
 > Fill in the "What I saw" column from your own `EXPLAIN` output, and replace any expectation that turned out different.
 
 | # | Query | Index | Expected first plan line |
-| --- | --- | --- | --- | --- |
+| --- | --- | --- | --- |
 | 1a | `WHERE lower(email) = 'user42@example.com'` | on `email` | `Seq Scan`: the function defeats the index |
 | 1b | the same | on `lower(email)` | `Index Scan` or `Bitmap Index Scan` |
 | 2a | `WHERE tenant_id = 7 ORDER BY created_at DESC LIMIT 20` | on `(tenant_id, created_at)` | `Index Scan Backward`, with no `Sort` |

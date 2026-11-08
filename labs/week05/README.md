@@ -65,3 +65,29 @@ uv run python claim_demo.py
 ```
 
 Both use the **test** database only: `claim_demo.py` empties it first.
+
+## Results
+
+### One million tasks, two slow queries
+
+1,000,000 tasks across 50 tenants (20,000 each; 90% finished, 10% active), after `VACUUM ANALYZE`.
+Postgres 17 in Docker. Times are Execution Time from `EXPLAIN (ANALYZE, BUFFERS)`.
+
+| Query | Before | After | Faster | Pages read | Index | Plan before → after |
+| --- | --- | --- | --- | --- | --- | --- |
+| A tenant's newest 20 tasks (the list endpoint) | 28.2 ms | 0.12 ms | 235× | 13,157 → 25 | `(tenant_id, created_at, id)` | Parallel Seq Scan + top-N heapsort → `Index Scan Backward`, no sort |
+| Active tasks by state, one tenant | 28.6 ms | 0.69 ms | 42× | 13,141 → 5 | partial: `(tenant_id, state) WHERE state IN ('queued', 'running', 'waiting_for_input')` | Parallel Seq Scan + sort → `Index Only Scan`, 0 heap fetches |
+
+Index sizes: the partial index is **744 kB**; the full composite index is **55 MB**, 74 times larger.
+
+**What I noticed:**
+- Before the indexes, both queries read the whole table (about 13,000 pages) to return 20 rows or 3 counts.
+  Every page was already in memory (`shared hit`, no `read`), so 28 ms is the *best* case;
+  reading from disk would be far slower.
+- The planner's estimates were close (about 20,300 rows estimated for tenant_07, 20,000 actual),
+  because `ANALYZE` had run. Bad estimates weren't the problem; the missing index was.
+- The partial index holds only active tasks, about 10% of rows, so it's tiny, and it answers the count
+  from the index alone. `Heap Fetches: 0` means `VACUUM` had marked the pages all-visible, so the table
+  was never touched.
+- The composite index is the one the initial migration already creates. This lab is the evidence for it.
+  The partial index isn't in a migration yet: that's a second Alembic revision (follow-up).
