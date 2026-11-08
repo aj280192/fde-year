@@ -220,3 +220,4 @@ __marimo__/
 .streamlit/secrets.toml
 node_modules/
 capstones/05-health-rag/data/
+capstones/05-health-rag/show_miss.py

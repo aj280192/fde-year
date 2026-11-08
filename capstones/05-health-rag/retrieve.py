@@ -39,6 +39,15 @@ KEYWORD_ANY_QUERY = """
     LIMIT %(k)s
 """
 
+KEYWORD_ANY_QUERY_NORM = """
+    SELECT booklet, para_no
+    FROM paragraphs,
+         CAST(replace(plainto_tsquery('english', %(q)s)::text, '&', '|') AS tsquery) AS q
+    WHERE tsv @@ q
+    ORDER BY ts_rank_cd(tsv, q, 1) DESC, booklet, para_no
+    LIMIT %(k)s
+"""
+
 # Every word must match.
 KEYWORD_ALL_QUERY = """
     SELECT booklet, para_no
@@ -72,6 +81,13 @@ def embed_query(model: SentenceTransformer, question: str) -> NDArray[np.float32
 def keyword(conn: psycopg.Connection[Any], question: str, k: int = 10) -> list[Hit]:
     """Full-text search; any word of the question may match."""
     return _hits(conn, KEYWORD_ANY_QUERY, {"q": question, "k": k})
+
+
+def keyword_norm(
+    conn: psycopg.Connection[Any], question: str, k: int = 10
+) -> list[Hit]:
+    """Full-text search; any word of the question may match."""
+    return _hits(conn, KEYWORD_ANY_QUERY_NORM, {"q": question, "k": k})
 
 
 def keyword_all(conn: psycopg.Connection[Any], question: str, k: int = 10) -> list[Hit]:

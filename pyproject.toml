@@ -28,4 +28,4 @@ dev = [
 
 [tool.pyright]
 typeCheckingMode = "strict"
-exclude = ["**/migrations/versions", "**/.venv"]
+exclude = ["**/migrations/versions", "**/.venv", "**/show_miss.py"]

@@ -1,0 +1,8 @@
+run_id,date,split,method,chunking,k,n_questions,recall_at_5,mrr_at_5,recall_at_20,per_booklet_recall_at_5,empty_results,ms_per_question,notes
+1,2026-11-09,tuning,keyword_all,paragraphs,5,596,0.144,0.161,0.145,b1=0.268(n=38) b2=0.128(n=99) b3=0.033(n=119) b4=0.117(n=32) b5=0.105(n=39) b6=0.191(n=269),428,0.2,every word must match
+2,2026-11-09,tuning,keyword,paragraphs,5,596,0.168,0.117,0.33,b1=0.136(n=38) b2=0.034(n=99) b3=0.017(n=119) b4=0.013(n=32) b5=0.064(n=39) b6=0.322(n=269),0,3.1,any word
+3,2026-11-09,tuning,keyword_norm,paragraphs,5,596,0.226,0.156,0.474,b1=0.189(n=38) b2=0.063(n=99) b3=0.065(n=119) b4=0.100(n=32) b5=0.123(n=39) b6=0.393(n=269),0,3.2,"any word, rank divided by length"
+4,2026-11-09,tuning,vector,paragraphs,5,596,0.473,0.39,0.621,b1=0.312(n=38) b2=0.516(n=99) b3=0.412(n=119) b4=0.289(n=32) b5=0.368(n=39) b6=0.543(n=269),0,1.9,"MiniLM, cosine"
+5,2026-11-09,tuning,hybrid,paragraphs,5,596,0.531,0.468,0.654,b1=0.461(n=38) b2=0.517(n=99) b3=0.493(n=119) b4=0.329(n=32) b5=0.388(n=39) b6=0.609(n=269),0,5.0,"RRF k=60, top 50 each, keyword any word"
+6,2026-11-09,tuning,vector,paragraphs,5,596,0.473,0.39,0.621,b1=0.312(n=38) b2=0.516(n=99) b3=0.412(n=119) b4=0.289(n=32) b5=0.368(n=39) b6=0.543(n=269),0,2.0,"MiniLM, cosine"
+7,2026-11-09,tuning,hybrid,paragraphs,5,596,0.531,0.468,0.654,b1=0.461(n=38) b2=0.517(n=99) b3=0.493(n=119) b4=0.329(n=32) b5=0.388(n=39) b6=0.609(n=269),0,5.6,"RRF k=60, top 50 each, keyword any word"
