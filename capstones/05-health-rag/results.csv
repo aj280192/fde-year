@@ -4,3 +4,18 @@ run_id,date,split,method,chunking,k,n_questions,recall_at_5,mrr_at_5,recall_at_2
 3,2026-11-09,tuning,keyword_norm,paragraphs,5,596,0.226,0.156,0.474,b1=0.189(n=38) b2=0.063(n=99) b3=0.065(n=119) b4=0.100(n=32) b5=0.123(n=39) b6=0.393(n=269),0,3.2,"any word, rank divided by length"
 4,2026-11-09,tuning,vector,paragraphs,5,596,0.473,0.39,0.621,b1=0.312(n=38) b2=0.516(n=99) b3=0.412(n=119) b4=0.289(n=32) b5=0.368(n=39) b6=0.543(n=269),0,1.9,"MiniLM, cosine"
 5,2026-11-09,tuning,hybrid,paragraphs,5,596,0.531,0.468,0.654,b1=0.461(n=38) b2=0.517(n=99) b3=0.493(n=119) b4=0.329(n=32) b5=0.388(n=39) b6=0.609(n=269),0,5.0,"RRF k=60, top 50 each, keyword any word"
+6,2026-11-10,tuning,hybrid_norm,paragraphs,5,596,0.558,0.504,0.679,b1=0.434(n=38) b2=0.519(n=99) b3=0.546(n=119) b4=0.390(n=32) b5=0.379(n=39) b6=0.642(n=269),0,5.1,RRF on keyword_norm + vector
+7,2026-11-10,tuning,hybrid,whole,5,596,0.531,0.468,0.654,b1=0.461(n=38) b2=0.517(n=99) b3=0.493(n=119) b4=0.329(n=32) b5=0.388(n=39) b6=0.609(n=269),0,7.5,check: must equal run 5 ctx=16001
+8,2026-11-10,tuning,keyword_norm,split,5,596,0.349,0.288,0.546,b1=0.346(n=38) b2=0.287(n=99) b3=0.291(n=119) b4=0.278(n=32) b5=0.272(n=39) b6=0.418(n=269),0,7.4,split ctx=3081
+9,2026-11-10,tuning,vector,split,5,596,0.516,0.44,0.662,b1=0.312(n=38) b2=0.514(n=99) b3=0.412(n=119) b4=0.289(n=32) b5=0.380(n=39) b6=0.637(n=269),0,4.1,split ctx=1385
+10,2026-11-10,tuning,hybrid_norm,split,5,596,0.558,0.492,0.68,b1=0.460(n=38) b2=0.537(n=99) b3=0.525(n=119) b4=0.390(n=32) b5=0.376(n=39) b6=0.640(n=269),0,11.7,split ctx=2186
+11,2026-11-10,tuning,keyword_norm,headings,5,596,0.284,0.195,0.539,b1=0.215(n=38) b2=0.105(n=99) b3=0.078(n=119) b4=0.156(n=32) b5=0.125(n=39) b6=0.489(n=269),0,7.0,headings ctx=41302
+12,2026-11-10,tuning,vector,headings,5,596,0.473,0.378,0.646,b1=0.211(n=38) b2=0.394(n=99) b3=0.437(n=119) b4=0.394(n=32) b5=0.335(n=39) b6=0.585(n=269),0,3.3,headings ctx=2486
+13,2026-11-10,tuning,hybrid_norm,headings,5,596,0.598,0.548,0.714,b1=0.428(n=38) b2=0.543(n=99) b3=0.527(n=119) b4=0.473(n=32) b5=0.471(n=39) b6=0.706(n=269),0,7.7,headings ctx=9274
+14,2026-11-10,tuning,keyword_norm,headings_split,5,596,0.433,0.357,0.605,b1=0.392(n=38) b2=0.333(n=99) b3=0.390(n=119) b4=0.398(n=32) b5=0.331(n=39) b6=0.514(n=269),0,5.0,headings_split ctx=3086
+15,2026-11-10,tuning,vector,headings_split,5,596,0.529,0.44,0.684,b1=0.211(n=38) b2=0.409(n=99) b3=0.437(n=119) b4=0.394(n=32) b5=0.358(n=39) b6=0.700(n=269),0,4.0,headings_split ctx=1532
+16,2026-11-10,tuning,hybrid_norm,headings_split,5,596,0.59,0.539,0.724,b1=0.455(n=38) b2=0.524(n=99) b3=0.513(n=119) b4=0.519(n=32) b5=0.438(n=39) b6=0.697(n=269),0,9.3,headings_split ctx=2352
+17,2026-11-10,tuning,keyword_weighted,heading_meta,5,596,0.197,0.156,0.353,b1=0.053(n=38) b2=0.061(n=99) b3=0.069(n=119) b4=0.156(n=32) b5=0.094(n=39) b6=0.344(n=269),0,4.3,"heading weighted A, text D ctx=13805"
+18,2026-11-10,tuning,hybrid_weighted,heading_meta,5,596,0.466,0.385,0.648,b1=0.465(n=38) b2=0.379(n=99) b3=0.399(n=119) b4=0.325(n=32) b5=0.301(n=39) b6=0.568(n=269),0,7.5,"heading weighted A, text D ctx=6923"
+19,2026-11-10,tuning,hybrid_norm+rerank,headings_split,5,596,0.649,0.65,0.724,b1=0.521(n=38) b2=0.614(n=99) b3=0.582(n=119) b4=0.567(n=32) b5=0.557(n=39) b6=0.734(n=269),0,36.7,cross-encoder over top 20 ctx=2384
+20,2026-11-10,heldout,hybrid_norm+rerank,headings_split,5,150,0.691,0.668,0.752,b1=0.800(n=5) b2=0.504(n=30) b3=0.704(n=36) b4=0.660(n=5) b5=0.628(n=7) b6=0.769(n=67),0,36.0,FINAL held-out ctx=2426

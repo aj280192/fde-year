@@ -21,7 +21,7 @@ fde-year/
 | 2 | An evaluation and safety harness for that agent: benchmark, traces, red-team report | 19 to 26 | Not started |
 | 3 | The agent as a multi-tenant platform on a public cloud, with a load test and a cost model | 27 to 36 | Not started |
 | 4 | A healthcare agent on synthetic records, built for a real user from discovery to handover | 37 to 44 | Not started |
-| 5 | A RAG assistant on public health guidelines: hybrid search, citations, an abstain rule, then a LangGraph retrieve-verify-answer graph | 5 to 24, alongside the others | Not started |
+| 5 | A RAG assistant on public health guidelines: hybrid search, citations, an abstain rule, then a LangGraph retrieve-verify-answer graph | 5 to 24, alongside the others | Part 1 done: retrieval, measured ([capstones/05-health-rag](capstones/05-health-rag)) |
 
 Project 5 uses the Malawi health guidelines dataset published on Zindi under [CC BY-NC-ND 4.0](https://creativecommons.org/licenses/by-nc-nd/4.0/). The data, chunks and embeddings are not committed. Download the files from Zindi to run it.
 
@@ -63,6 +63,9 @@ uv run pytest                # test
 | --- | --- | --- |
 | 2 | [labs/week02/toolkit](labs/week02/toolkit) | A packaged Python toolkit: strict Pydantic models with a tagged union, typed settings, JSON logging, coded errors, and a CLI with exit codes. Built as a wheel and tagged `toolkit-v0.1.0`. |
 | 3 | [labs/week03](labs/week03) | A resilient LLM gateway for any OpenAI-compatible model: async client with retries, full-jitter backoff, `Retry-After`, a time budget and a concurrency limit, plus a `POST /ask` SSE endpoint with heartbeats, error events and disconnect handling. Tested against a fake model server with six failure modes (35 tests). |
+| 4 | [labs/week04](labs/week04) | An HTTP API for long-running agent tasks, designed before it was built ([DESIGN.md](labs/week04/DESIGN.md)): create returns 202, API keys with read and write scopes, idempotent create, opaque cursor paging, one error shape. Refactored into domain, repository, service and API layers with an architecture test (167 tests, `openapi.json` committed). |
+| 5 | [labs/week05](labs/week05) | The same API on Postgres: an Alembic-managed schema, a repository that passes the same tests as the in-memory one, a million-row index lab (235× and 42× faster with a composite and a partial index), and demos of a lost update and of `FOR UPDATE SKIP LOCKED`. |
+| 5 | [capstones/05-health-rag](capstones/05-health-rag) | Retrieval over six health-guideline booklets: keyword, vector and hybrid search in Postgres, a labelled test set with a held-out split, chunking experiments and a cross-encoder reranker, every run recorded in `results.csv`. Design: [Q1_Retrieval_Design.md](capstones/05-health-rag/Q1_Retrieval_Design.md). |
 
 To try week 3 by hand against a local [Ollama](https://ollama.com) model:
 
@@ -79,6 +82,8 @@ curl -N -X POST localhost:8000/ask -H 'content-type: application/json' \
 | 1 | 5 to 11 Oct 2026 | Baseline and setup | [notes/week01.md](notes/week01.md) |
 | 2 | 12 to 18 Oct 2026 | Production Python | [notes/week02.md](notes/week02.md) |
 | 3 | 19 to 25 Oct 2026 | Async, streaming and failure handling | [notes/week03.md](notes/week03.md) |
+| 4 | 26 Oct to 1 Nov 2026 | API design | [notes/week04.md](notes/week04.md) |
+| 5 | 2 to 8 Nov 2026 | Data and SQL; retrieval you can measure | [Q1_Retrieval_Design.md](capstones/05-health-rag/Q1_Retrieval_Design.md) |
 
 ## Licence
 

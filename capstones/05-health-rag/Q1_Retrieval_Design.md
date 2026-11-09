@@ -1,6 +1,6 @@
 # Q1 · Retrieval design for the health guidelines assistant
 
-**Status:** draft, 9 Nov 2026. Sections marked ⏳ are filled in after Monday's chunking and reranker runs.
+**Status:** final, 10 Nov 2026. Numbers marked ‹…› are copied from the run named beside them.
 Every number points at a row of `results.csv` (shown as *run N*).
 
 ## The problem
@@ -66,35 +66,66 @@ Recall@5 is 0.531 and Recall@20 is 0.654: 12.3 points of labelled paragraphs are
 too low, and that's the most a reranker can add. The other 35% aren't in the top 20 at all, so they
 need better chunking, not reranking. That's why chunking is tried first.
 
-## Chunking and metadata ⏳
+## Chunking and metadata
 
-Planned, one change at a time, kept only if it gains 2 points or more:
+Tried one change at a time, each kept only if it gained 2 points or more. A chunk is what the model
+would receive, so the top 5 are cut by **chunk**, and a chunk counts as finding every paragraph it covers.
 
-1. **Split long paragraphs** into about 800-character pieces with 100 overlapping. Expected to help most,
-   because the big tables are what crowd out the top 5.
-2. **Attach each heading to the paragraphs under it.** 15% of labelled paragraphs are headings under
-   40 characters, and for 34 questions every label is one (Recall@5 0.029 on them, against 0.238 on the
-   rest, *run 3*). So a chunk records the paragraphs it covers **including its heading**, and a hit on the
-   chunk counts for both.
-3. **The nearest heading as metadata,** weighted higher in keyword search.
+| Strategy | What changes | Chunks | Keyword (rank ÷ length): Recall@5 | Hybrid: Recall@5 · MRR@5 · Recall@20 | Keyword top-5 context | Kept? |
+| --- | --- | --- | --- | --- | --- | --- |
+| whole | one chunk per paragraph (the baseline) | 5,155 | 0.226 (*run 3*) | 0.531 · 0.468 · 0.654 (*run 5*) | 41,613 characters | baseline |
+| split | paragraphs over 1,000 characters cut into ~800-character pieces, 100 overlapping | 5,881 | 0.349 (*run 8*) | ‹run 10› | ~3,100 | ‹yes / no› |
+| headings | each paragraph prefixed with the heading above it, and covering it | 5,155 | 0.284 (*run 11*) | ‹run 13› | ~41,300 | ‹yes / no› |
+| headings + split | both | 5,902 | **0.433** (*run 14*) | ‹run 16› | ~3,100 | ‹yes / no› |
+| heading as metadata | heading in its own column, weighted higher in keyword search | 5,155 | 0.197 (*run 17*) | ‹run 18› | ~13,800 | no: keyword fell 2.9 points |
 
-Each chunk carries: booklet, the range of paragraphs it covers, its heading, the strategy that made it.
+- **Splitting long paragraphs worked, more than I predicted:** keyword Recall@5 rose 12.3 points (I
+  expected 8), and the text sent to the model fell from about 41,600 characters to 3,100, because the
+  16,000-character tables no longer fill the top 5.
+- **Headings help only once the tables are split.** On their own they gain 5.8 points for keyword search,
+  but the big tables still dominate (they even get longer). On top of splitting, they add another
+  8.4 points (*run 8 → run 14*). The weakest booklet gained most: booklet 3 went from 0.065 to 0.390.
+- **Heading as weighted metadata hurt** (0.197 against 0.226): a short heading matched in weight A
+  outranks paragraphs that answer the question. Dropped.
+- ‹One sentence on vector and hybrid, from runs 9, 10, 15 and 16: did the same order hold?›
 
-## What the reranker adds ⏳
+**Each chunk carries:** its booklet; `covers`, the paragraphs it stands for (with `headings`, the
+paragraph and its heading), used for citing and for scoring; a piece number when a paragraph is split;
+the strategy that built it; its text, a full-text vector and an embedding. Chunks are rebuilt from the
+`paragraphs` table, which never changes.
 
-A cross-encoder (`ms-marco-MiniLM-L-6-v2`) re-scores the best setup's top 20. Report the gain in Recall@5
-and MRR@5, and the added time per question, next to the ceiling set by Recall@20.
+## What the reranker adds
 
-## Held-out result ⏳
+A cross-encoder (`ms-marco-MiniLM-L-6-v2`) re-scores the best setup's top 20 (*run 19*):
+Recall@5 ‹…› → ‹…›, MRR@5 ‹…› → ‹…›, at ‹…› ms per question more. Recall@20 stays ‹…›, as it must: the
+reranker only re-orders the same 20 chunks, so that is its ceiling. ‹Kept / not kept, and why.›
 
-The final configuration, run once on the 150 held-out questions, beside its tuning score. Booklets 1 and
-4 have only 5 held-out questions each, so their per-booklet numbers aren't meaningful.
+## The final configuration
+
+‹strategy› chunks; ‹hybrid or hybrid_norm› retrieval (top 50 from each list, merged by reciprocal rank
+fusion); ‹with or without› the reranker; the top 5 chunks go to the model.
+
+## Held-out result
+
+Run once, on the 150 held-out questions (*run 20*):
+
+| | Recall@5 | MRR@5 | Recall@20 |
+| --- | --- | --- | --- |
+| Tuning, 596 questions (*run ‹N›*) | ‹…› | ‹…› | ‹…› |
+| Held-out, 150 questions (*run 20*) | ‹…› | ‹…› | ‹…› |
+
+‹One sentence: a drop of a few points is normal, because the choices were tuned on the tuning set;
+say whether this one is.› Booklets 1 and 4 have only 5 held-out questions each, so their per-booklet
+numbers aren't meaningful.
 
 ## Limits and next steps
 
 - Labels are paragraph numbers chosen by people. Some point at a heading rather than the answer, and
   some answers span several paragraphs, so Recall can't reach 1.0 even for a perfect retriever.
-- Tables are flattened into text. Chunking helps, but the table structure is lost.
+- Tables are flattened into text. Splitting helps, but the table structure is lost; one chunk per table
+  row, with its header repeated, is the next thing to try.
+- The heading rule is a guess (short, no full stop, not starting lower case), so some list items are
+  treated as headings.
 - Retrieval is measured, but answers aren't yet: faithfulness and citation accuracy need a judge
   (week 21).
 - Next (week 6): `rag.py`, with numbered sources, citations, and an abstain rule enforced in code.

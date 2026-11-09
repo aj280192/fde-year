@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import os
 import sys
+from collections.abc import Callable
 from typing import Any, LiteralString, NamedTuple
 
 import numpy as np
@@ -102,14 +103,22 @@ def vector(
     return _hits(conn, VECTOR_QUERY, {"e": query_vec, "k": k})
 
 
-def rrf(ranked_lists: list[list[Hit]], k: int, rrf_k: int = 60) -> list[Hit]:
-    """Reciprocal rank fusion: score = sum over lists of 1 / (rrf_k + rank)."""
-    scores: dict[Hit, float] = {}
+def rrf[T: tuple[Any, ...]](
+    ranked_lists: list[list[T]], k: int, rrf_k: int = 60
+) -> list[T]:
+    """Reciprocal rank fusion: score = sum over lists of 1 / (rrf_k + rank).
+
+    Works on any tuple-like hit (a Hit, or a ChunkHit from retrieve_chunks.py).
+    """
+    scores: dict[T, float] = {}
     for ranked in ranked_lists:
         for rank, hit in enumerate(ranked, start=1):
             scores[hit] = scores.get(hit, 0.0) + 1.0 / (rrf_k + rank)
-    # Highest score first; ties broken by (booklet, para_no) so runs are repeatable.
+    # Highest score first; ties broken by the hit itself, so runs are repeatable.
     return sorted(scores, key=lambda h: (-scores[h], h))[:k]
+
+
+KeywordFn = Callable[[psycopg.Connection[Any], str, int], list[Hit]]
 
 
 def hybrid(
@@ -118,10 +127,11 @@ def hybrid(
     query_vec: NDArray[np.float32],
     k: int = 10,
     pool_size: int = 50,
+    keyword_fn: KeywordFn = keyword,
 ) -> list[Hit]:
-    """Keyword (any word) and vector, top `pool_size` each, merged by RRF."""
+    """A keyword list (any word, by default) and vector, top `pool_size` each, merged by RRF."""
     return rrf(
-        [keyword(conn, question, pool_size), vector(conn, query_vec, pool_size)], k
+        [keyword_fn(conn, question, pool_size), vector(conn, query_vec, pool_size)], k
     )
 
 

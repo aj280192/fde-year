@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import pytest
-from metrics import mean, mrr_at_k, recall_at_k
+from metrics import mean, mrr_at_k, mrr_groups_at_k, recall_at_k, recall_groups_at_k
 
 
 def test_mrr_first_hit_at_rank_2() -> None:
@@ -56,3 +56,34 @@ def test_empty_relevant_is_an_error() -> None:
 def test_mean() -> None:
     assert mean([1.0, 0.0, 0.5]) == 0.5
     assert mean([]) == 0.0
+
+
+def test_groups_of_one_match_the_plain_metrics() -> None:
+    retrieved = ["a", "b", "c", "d", "e", "f"]
+    groups = [[x] for x in retrieved]
+    for relevant in ({"b"}, {"f"}, {"a", "e"}, {"z"}):
+        for k in (5, 20):
+            assert recall_groups_at_k(groups, relevant, k) == recall_at_k(
+                retrieved, relevant, k
+            )
+            assert mrr_groups_at_k(groups, relevant, k) == mrr_at_k(
+                retrieved, relevant, k
+            )
+
+
+def test_a_chunk_covering_two_paragraphs_counts_for_both() -> None:
+    groups = [["x"], ["h", "p"]]  # chunk 2 covers a heading and its paragraph
+    assert recall_groups_at_k(groups, {"h", "p"}, 5) == 1.0
+    assert mrr_groups_at_k(groups, {"p"}, 5) == 0.5  # ranked by chunk, not by paragraph
+
+
+def test_groups_are_cut_by_chunk_rank() -> None:
+    groups = [["a"], ["b"], ["c"], ["d"], ["e"], ["f", "g"]]
+    assert recall_groups_at_k(groups, {"g"}, 5) == 0.0
+    assert recall_groups_at_k(groups, {"g"}, 20) == 1.0
+    assert mrr_groups_at_k(groups, {"g"}, 5) == 0.0
+
+
+def test_groups_empty_relevant_is_an_error() -> None:
+    with pytest.raises(ValueError):
+        recall_groups_at_k([["a"]], set(), 5)

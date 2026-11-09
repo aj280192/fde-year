@@ -425,6 +425,7 @@ Notes on the codes:
 | 15 | `add` creates a missing tenant row | Tenants created by an admin API, and `add` refusing an unknown tenant | With multi-tenancy (capstone 3) |
 | 16 | Expired idempotency records stay in the table | A periodic `DELETE … WHERE created_at < now() - interval '24 hours'` | Before production |
 | 17 | `runs` and `tool_calls` exist but nothing writes them | The worker records each attempt and each tool call | Phase 2 (capstone 1) |
+| 18 | Times read from Postgres came back in the server's time zone, so the API showed `+08:00` on a database set to Singapore time and `Z` from memory | **Fixed 10 Nov:** the repository converts every time it reads to UTC (`astimezone(UTC)`); the tests pass with the database in UTC and in `Asia/Singapore` | Done |
 
 ---
 
@@ -480,7 +481,7 @@ erDiagram
 | Table | Holds | Key rules |
 | --- | --- | --- |
 | `tenants` | one row per API key owner (`key_id`) | primary key `id` |
-| `tasks` | one row per task; mirrors the domain `Task` | `CHECK` on the 6 states (built from `TaskState`), on input length 1 to 10,000, and that `error_code` and `error_message` are both set or both null; foreign key to `tenants`; index `(tenant_id, created_at, id)` |
+| `tasks` | one row per task; mirrors the domain `Task` | `CHECK` on the 6 states (built from `TaskState`), on input length 1 to 10,000, and that `error_code` and `error_message` are both set or both null; foreign key to `tenants`; index `(tenant_id, created_at, id)` for the list query; partial index `ix_tasks_active` on `(tenant_id, state)` for active states only (744 kB against 55 MB for a full index; added 10 Nov in migration `b7d41c2e9a05`) |
 | `idempotency_keys` | one record per (owner, idempotency key) | primary key `(tenant_id, key)`, so two inserts of the same pair can't both succeed; foreign keys to `tenants` and `tasks` |
 | `runs` | one row per attempt at a task (nothing writes these yet) | unique `(task_id, attempt)`; `CHECK` on `running`, `succeeded`, `failed`, `cancelled` |
 | `tool_calls` | one row per tool call in a run, with arguments and result as `JSONB` (read by trajectory metrics later) | unique `(run_id, seq)` |

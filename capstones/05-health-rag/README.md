@@ -126,3 +126,62 @@ questions still can't score. I expect a smaller gain, about +2 to +3 points.
 
 Vector search should suffer less from the big tables, because the model reads only their first 256
 tokens. Hybrid misses (run 5) still to read, to check this.
+**Checked on 10 Nov (runs 8, 11 and 14):** right about splitting, and it helped more than predicted:
++12.3 points for keyword search, not +8, and booklet 3 gained most. Headings alone gained 5.8, more than
+predicted, but they paid off most on top of splitting (+8.4 more). Since `covers` is a list, a chunk
+covers its heading's paragraph and its own, not the paragraphs in between.
+
+## Part 2 · Chunking, reranking and results (week 5)
+
+| File | Does |
+| --- | --- |
+| `schema_chunks.sql` | the `chunks` table: one set of rows per strategy, each chunk with `covers` (the paragraphs it stands for), a generated `tsvector` (plain and heading-weighted) and a `vector(384)` |
+| `build_chunks.py` | builds one strategy's chunks from `paragraphs`: `whole`, `split`, `headings`, `headings_split`, `heading_meta` |
+| `embed_chunks.py` | embeds one strategy's chunks; reports how many still exceed 256 tokens |
+| `retrieve_chunks.py` | keyword, vector and hybrid search over one strategy's chunks |
+| `rerank.py` | re-orders the top 20 with a cross-encoder |
+| `build_testset.py` | the tuning and held-out question sets from `Train.csv` (written to `data/`, not committed) |
+| `metrics.py` | Recall@k and MRR@k, for paragraphs and for chunks covering several paragraphs |
+| `evaluate.py` | scores one setup and appends a row to `results.csv` |
+| `run_experiments.sh` | every chunking run, in a fixed order |
+| `results_table.py` | prints `results.csv` as the table below |
+| `snippets_q1.py` | `chunk_documents`, `build_index` and `retrieve` for the final configuration |
+| `show_miss.py` | prints one question's labelled paragraphs and top hits from a run (terminal only) |
+
+```bash
+cd capstones/05-health-rag
+export HEALTH_RAG_DATABASE_URL=postgresql://postgres:dev@localhost:5432/health_rag
+uv run python build_testset.py                 # data/tuning.jsonl and data/heldout.jsonl
+uv run python embed.py                         # paragraph vectors
+bash run_experiments.sh check                  # runs 6 and 7
+bash run_experiments.sh chunks hybrid_norm     # runs 8 to 18 (or: chunks hybrid)
+```
+
+### Results (tuning set: 596 questions; held-out: 150, run once)
+
+Every run is a row of `results.csv`. Recall@5 and MRR@5 are cut at the top 5 chunks; a difference under
+2 points (about 12 questions) counts as no change. The design and the reasoning are in
+[Q1_Retrieval_Design.md](Q1_Retrieval_Design.md).
+
+| Run | Split | Method | Chunking | Recall@5 | MRR@5 | Recall@20 | ms/question | Kept? | Notes|
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | tuning | keyword_all | paragraphs | 0.144 | 0.161 | 0.145 | 0.2 |  | every word must match |
+| 2 | tuning | keyword | paragraphs | 0.168 | 0.117 | 0.330 | 3.1 |  | any word |
+| 3 | tuning | keyword_norm | paragraphs | 0.226 | 0.156 | 0.474 | 3.2 |  | any word, rank divided by length |
+| 4 | tuning | vector | paragraphs | 0.473 | 0.390 | 0.621 | 1.9 |  | MiniLM, cosine |
+| 5 | tuning | hybrid | paragraphs | 0.531 | 0.468 | 0.654 | 5.0 |  | RRF k=60, top 50 each, keyword any word |
+| 6 | tuning | hybrid_norm | paragraphs | 0.558 | 0.504 | 0.679 | 5.1 |  | RRF on keyword_norm+ vector |
+| 7 | tuning | hybrid | whole | 0.531 | 0.468 | 0.654 | 7.5 | baseline | check: must equal run5 ctx=16001 |
+| 8 | tuning | keyword_norm | split | 0.349 | 0.288 | 0.546 | 7.4 |  | split ctx=3081 |
+| 9 | tuning | vector | split | 0.516 | 0.440 | 0.662 | 4.1 |  | split ctx=1385 |
+| 10 | tuning | hybrid_norm | split | 0.558 | 0.492 | 0.680 | 11.7 |  | split ctx=2186 |
+| 11 | tuning | keyword_norm | headings | 0.284 | 0.195 | 0.539 | 7.0 |  | headings ctx=41302 |
+| 12 | tuning | vector | headings | 0.473 | 0.378 | 0.646 | 3.3 |  | headings ctx=2486 |
+| 13 | tuning | hybrid_norm | headings | 0.598 | 0.548 | 0.714 | 7.7 |  | headings ctx=9274 |
+| 14 | tuning | keyword_norm | headings_split | 0.433 | 0.357 | 0.605 | 5.0 |  | headings_split ctx=3086 |
+| 15 | tuning | vector | headings_split | 0.529 | 0.440 | 0.684 | 4.0 |  | headings_split ctx=1532 |
+| 16 | tuning | hybrid_norm | headings_split | 0.590 | 0.539 | 0.724 | 9.3 |  | headings_splitctx=2352 |
+| 17 | tuning | keyword_weighted | heading_meta | 0.197 | 0.156 | 0.353 | 4.3 |  | heading weighted A, text D ctx=13805 |
+| 18 | tuning | hybrid_weighted | heading_meta | 0.466 | 0.385 | 0.648 | 7.5 |  | heading weighted A, text D ctx=6923 |
+| 19 | tuning | hybrid_norm+rerank | headings_split | 0.649 | 0.650 | 0.724 | 36.7 |  | cross-encoder over top 20 ctx=2384 |
+| 20 | heldout | hybrid_norm+rerank | headings_split | 0.691 | 0.668 | 0.752 | 36.0 | **final** | FINAL held-out ctx=2426 |
