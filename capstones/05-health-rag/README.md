@@ -130,6 +130,8 @@ tokens. Hybrid misses (run 5) still to read, to check this.
 +12.3 points for keyword search, not +8, and booklet 3 gained most. Headings alone gained 5.8, more than
 predicted, but they paid off most on top of splitting (+8.4 more). Since `covers` is a list, a chunk
 covers its heading's paragraph and its own, not the paragraphs in between.
+For hybrid search the order was different: splitting added nothing (run 10), and headings added most
+(+4.0, run 13). The final setup (run 19) reached Recall@5 0.649 on tuning and 0.691 held-out (run 20).
 
 ## Part 2 · Chunking, reranking and results (week 5)
 
@@ -163,25 +165,28 @@ Every run is a row of `results.csv`. Recall@5 and MRR@5 are cut at the top 5 chu
 2 points (about 12 questions) counts as no change. The design and the reasoning are in
 [Q1_Retrieval_Design.md](Q1_Retrieval_Design.md).
 
-| Run | Split | Method | Chunking | Recall@5 | MRR@5 | Recall@20 | ms/question | Kept? | Notes|
+| Run | Split | Method | Chunking | Recall@5 | MRR@5 | Recall@20 | ms/question | Kept? | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | tuning | keyword_all | paragraphs | 0.144 | 0.161 | 0.145 | 0.2 |  | every word must match |
-| 2 | tuning | keyword | paragraphs | 0.168 | 0.117 | 0.330 | 3.1 |  | any word |
-| 3 | tuning | keyword_norm | paragraphs | 0.226 | 0.156 | 0.474 | 3.2 |  | any word, rank divided by length |
-| 4 | tuning | vector | paragraphs | 0.473 | 0.390 | 0.621 | 1.9 |  | MiniLM, cosine |
-| 5 | tuning | hybrid | paragraphs | 0.531 | 0.468 | 0.654 | 5.0 |  | RRF k=60, top 50 each, keyword any word |
-| 6 | tuning | hybrid_norm | paragraphs | 0.558 | 0.504 | 0.679 | 5.1 |  | RRF on keyword_norm+ vector |
-| 7 | tuning | hybrid | whole | 0.531 | 0.468 | 0.654 | 7.5 | baseline | check: must equal run5 ctx=16001 |
-| 8 | tuning | keyword_norm | split | 0.349 | 0.288 | 0.546 | 7.4 |  | split ctx=3081 |
-| 9 | tuning | vector | split | 0.516 | 0.440 | 0.662 | 4.1 |  | split ctx=1385 |
-| 10 | tuning | hybrid_norm | split | 0.558 | 0.492 | 0.680 | 11.7 |  | split ctx=2186 |
-| 11 | tuning | keyword_norm | headings | 0.284 | 0.195 | 0.539 | 7.0 |  | headings ctx=41302 |
-| 12 | tuning | vector | headings | 0.473 | 0.378 | 0.646 | 3.3 |  | headings ctx=2486 |
-| 13 | tuning | hybrid_norm | headings | 0.598 | 0.548 | 0.714 | 7.7 |  | headings ctx=9274 |
-| 14 | tuning | keyword_norm | headings_split | 0.433 | 0.357 | 0.605 | 5.0 |  | headings_split ctx=3086 |
-| 15 | tuning | vector | headings_split | 0.529 | 0.440 | 0.684 | 4.0 |  | headings_split ctx=1532 |
-| 16 | tuning | hybrid_norm | headings_split | 0.590 | 0.539 | 0.724 | 9.3 |  | headings_splitctx=2352 |
-| 17 | tuning | keyword_weighted | heading_meta | 0.197 | 0.156 | 0.353 | 4.3 |  | heading weighted A, text D ctx=13805 |
-| 18 | tuning | hybrid_weighted | heading_meta | 0.466 | 0.385 | 0.648 | 7.5 |  | heading weighted A, text D ctx=6923 |
-| 19 | tuning | hybrid_norm+rerank | headings_split | 0.649 | 0.650 | 0.724 | 36.7 |  | cross-encoder over top 20 ctx=2384 |
-| 20 | heldout | hybrid_norm+rerank | headings_split | 0.691 | 0.668 | 0.752 | 36.0 | **final** | FINAL held-out ctx=2426 |
+| 1 | tuning | keyword_all | paragraphs | 0.144 | 0.161 | 0.145 | 0.2 | no | every word must match: no result for 428 questions |
+| 2 | tuning | keyword | paragraphs | 0.168 | 0.117 | 0.330 | 3.1 | no | any word |
+| 3 | tuning | keyword_norm | paragraphs | 0.226 | 0.156 | 0.474 | 3.2 | yes | any word, rank divided by length |
+| 4 | tuning | vector | paragraphs | 0.473 | 0.390 | 0.621 | 1.9 | baseline | MiniLM, cosine |
+| 5 | tuning | hybrid | paragraphs | 0.531 | 0.468 | 0.654 | 5.0 | no | RRF k=60, top 50 each, keyword any word |
+| 6 | tuning | hybrid_norm | paragraphs | 0.558 | 0.504 | 0.679 | 5.1 | yes | RRF on keyword_norm + vector |
+| 7 | tuning | hybrid | whole | 0.531 | 0.468 | 0.654 | 7.5 | check | chunk path on whole paragraphs: equals run 5 |
+| 8 | tuning | keyword_norm | split | 0.349 | 0.288 | 0.546 | 7.4 | | ctx 3,081 |
+| 9 | tuning | vector | split | 0.516 | 0.440 | 0.662 | 4.1 | | ctx 1,385 |
+| 10 | tuning | hybrid_norm | split | 0.558 | 0.492 | 0.680 | 11.7 | no | hybrid unchanged; ctx 2,186 |
+| 11 | tuning | keyword_norm | headings | 0.284 | 0.195 | 0.539 | 7.0 | | ctx 41,302 |
+| 12 | tuning | vector | headings | 0.473 | 0.378 | 0.646 | 3.3 | | ctx 2,486 |
+| 13 | tuning | hybrid_norm | headings | 0.598 | 0.548 | 0.714 | 7.7 | yes | +4.0; ctx 9,274 |
+| 14 | tuning | keyword_norm | headings_split | 0.433 | 0.357 | 0.605 | 5.0 | | ctx 3,086 |
+| 15 | tuning | vector | headings_split | 0.529 | 0.440 | 0.684 | 4.0 | | ctx 1,532 |
+| 16 | tuning | hybrid_norm | headings_split | 0.590 | 0.539 | 0.724 | 9.3 | **yes** | ties run 13; highest Recall@20, a quarter of the context (2,352) |
+| 17 | tuning | keyword_weighted | heading_meta | 0.197 | 0.156 | 0.353 | 4.3 | no | heading weighted A, text D |
+| 18 | tuning | hybrid_weighted | heading_meta | 0.466 | 0.385 | 0.648 | 7.5 | no | heading weighted A, text D |
+| 19 | tuning | hybrid_norm+rerank | headings_split | 0.649 | 0.650 | 0.724 | 36.7 | **yes** | cross-encoder over top 20 |
+| 20 | heldout | hybrid_norm+rerank | headings_split | **0.691** | **0.668** | **0.752** | 36.0 | **final** | run once |
+
+**Final setup:** headings + split chunks, hybrid on the length-penalised keyword list and vectors, reranked by
+a cross-encoder (run 19 on tuning, run 20 held out).

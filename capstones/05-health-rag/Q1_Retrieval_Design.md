@@ -1,6 +1,6 @@
 # Q1 · Retrieval design for the health guidelines assistant
 
-**Status:** final, 10 Nov 2026. Numbers marked ‹…› are copied from the run named beside them.
+**Status:** final, 10 Nov 2026.
 Every number points at a row of `results.csv` (shown as *run N*).
 
 ## The problem
@@ -56,6 +56,8 @@ citations and abstaining come in week 6.
   (0.168, *run 2*). The two lists find different paragraphs: keyword search catches exact terms
   (disease and drug names) that the embedding blurs, and a paragraph both rank well goes to the top.
   Vector search is the stronger half on this data: 0.473 against 0.226 for the best keyword run (*run 3*).
+  Merging the length-penalised keyword list instead adds 2.7 more points (0.558, MRR@5 0.504, *run 6*),
+  so that is the hybrid used from here on.
 
 ## top_k
 
@@ -73,11 +75,11 @@ would receive, so the top 5 are cut by **chunk**, and a chunk counts as finding 
 
 | Strategy | What changes | Chunks | Keyword (rank ÷ length): Recall@5 | Hybrid: Recall@5 · MRR@5 · Recall@20 | Keyword top-5 context | Kept? |
 | --- | --- | --- | --- | --- | --- | --- |
-| whole | one chunk per paragraph (the baseline) | 5,155 | 0.226 (*run 3*) | 0.531 · 0.468 · 0.654 (*run 5*) | 41,613 characters | baseline |
-| split | paragraphs over 1,000 characters cut into ~800-character pieces, 100 overlapping | 5,881 | 0.349 (*run 8*) | ‹run 10› | ~3,100 | ‹yes / no› |
-| headings | each paragraph prefixed with the heading above it, and covering it | 5,155 | 0.284 (*run 11*) | ‹run 13› | ~41,300 | ‹yes / no› |
-| headings + split | both | 5,902 | **0.433** (*run 14*) | ‹run 16› | ~3,100 | ‹yes / no› |
-| heading as metadata | heading in its own column, weighted higher in keyword search | 5,155 | 0.197 (*run 17*) | ‹run 18› | ~13,800 | no: keyword fell 2.9 points |
+| whole | one chunk per paragraph (the baseline) | 5,155 | 0.226 (*run 3*) | 0.558 · 0.504 · 0.679 (*run 6*) | 41,613 characters | baseline |
+| split | paragraphs over 1,000 characters cut into ~800-character pieces, 100 overlapping | 5,881 | 0.349 (*run 8*) | 0.558 · 0.492 · 0.680 (*run 10*) | ~3,100 | no: hybrid unchanged |
+| headings | each paragraph prefixed with the heading above it, and covering it | 5,155 | 0.284 (*run 11*) | 0.598 · 0.548 · 0.714 (*run 13*) | ~41,300 | yes: +4.0 |
+| headings + split | both | 5,902 | **0.433** (*run 14*) | 0.590 · 0.539 · **0.724** (*run 16*) | ~3,100 | **yes: final** |
+| heading as metadata | heading in its own column, weighted higher in keyword search | 5,155 | 0.197 (*run 17*) | 0.466 · 0.385 · 0.648 (*run 18*) | ~13,800 | no: hybrid fell 9.2 points |
 
 - **Splitting long paragraphs worked, more than I predicted:** keyword Recall@5 rose 12.3 points (I
   expected 8), and the text sent to the model fell from about 41,600 characters to 3,100, because the
@@ -87,7 +89,14 @@ would receive, so the top 5 are cut by **chunk**, and a chunk counts as finding 
   8.4 points (*run 8 → run 14*). The weakest booklet gained most: booklet 3 went from 0.065 to 0.390.
 - **Heading as weighted metadata hurt** (0.197 against 0.226): a short heading matched in weight A
   outranks paragraphs that answer the question. Dropped.
-- ‹One sentence on vector and hybrid, from runs 9, 10, 15 and 16: did the same order hold?›
+- **For vector and hybrid search, the order was different.** Splitting helped vector search (+4.3,
+  *run 9*), because text past the model's 256 tokens now gets embedded, but added nothing to hybrid
+  (*run 10*). Headings added nothing to vector search alone (*run 12*), yet gave hybrid its biggest gain,
+  +4.0 (*run 13*): with the topic in the text, the keyword and vector lists agree more often.
+- **Why headings + split, when headings alone scored 0.8 higher:** by the 2-point rule the two are a
+  tie, so the choice rests on what else they offer. Headings + split has the highest Recall@20 (0.724
+  against 0.714), which is the reranker's ceiling, and sends a quarter of the text to the model
+  (about 2,350 characters in the top 5 against 9,270, *runs 16 and 13*).
 
 **Each chunk carries:** its booklet; `covers`, the paragraphs it stands for (with `headings`, the
 paragraph and its heading), used for citing and for scoring; a piece number when a paragraph is split;
@@ -97,13 +106,20 @@ the strategy that built it; its text, a full-text vector and an embedding. Chunk
 ## What the reranker adds
 
 A cross-encoder (`ms-marco-MiniLM-L-6-v2`) re-scores the best setup's top 20 (*run 19*):
-Recall@5 ‹…› → ‹…›, MRR@5 ‹…› → ‹…›, at ‹…› ms per question more. Recall@20 stays ‹…›, as it must: the
-reranker only re-orders the same 20 chunks, so that is its ceiling. ‹Kept / not kept, and why.›
+Recall@5 0.590 → 0.649 (+5.9), MRR@5 0.539 → 0.650 (+11.1), at about 27 ms per question more
+(9.3 → 36.7 ms, on a laptop GPU). Recall@20 stays 0.724, as it must: the reranker only re-orders the
+same 20 chunks, so that is its ceiling, and 7.5 points of it are still ranked 6 to 20. **Kept:** the
+gain is well past the noise, the right paragraph moves to the top far more often (MRR), and 37 ms is
+small next to the seconds a language model takes to answer.
 
 ## The final configuration
 
-‹strategy› chunks; ‹hybrid or hybrid_norm› retrieval (top 50 from each list, merged by reciprocal rank
-fusion); ‹with or without› the reranker; the top 5 chunks go to the model.
+**Headings + split** chunks (each paragraph with the heading above it, anything over 1,000 characters
+split into overlapping ~800-character pieces); **hybrid** retrieval (keyword with rank divided by length,
+and vector, top 50 from each, merged by reciprocal rank fusion); the **cross-encoder** re-orders the top
+20; the **top 5** chunks, about 2,400 characters, go to the model. Against the first hybrid (*run 5*):
+Recall@5 0.531 → 0.649 and MRR@5 0.468 → 0.650, with about 7 times less text in the top 5
+(16,001 → 2,384 characters, *runs 7 and 19*).
 
 ## Held-out result
 
@@ -111,11 +127,12 @@ Run once, on the 150 held-out questions (*run 20*):
 
 | | Recall@5 | MRR@5 | Recall@20 |
 | --- | --- | --- | --- |
-| Tuning, 596 questions (*run ‹N›*) | ‹…› | ‹…› | ‹…› |
-| Held-out, 150 questions (*run 20*) | ‹…› | ‹…› | ‹…› |
+| Tuning, 596 questions (*run 19*) | 0.649 | 0.650 | 0.724 |
+| Held-out, 150 questions (*run 20*) | 0.691 | 0.668 | 0.752 |
 
-‹One sentence: a drop of a few points is normal, because the choices were tuned on the tuning set;
-say whether this one is.› Booklets 1 and 4 have only 5 held-out questions each, so their per-booklet
+The held-out score is 4.2 points *higher*, not lower. With 150 questions, one question moves Recall@5
+by 0.67 points and the standard error is about 4 points, so the two agree within noise: there's no sign
+that the choices were fitted to the tuning questions. Booklets 1 and 4 have only 5 held-out questions each, so their per-booklet
 numbers aren't meaningful.
 
 ## Limits and next steps

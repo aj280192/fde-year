@@ -6,7 +6,8 @@ The final configuration (Q1_Retrieval_Design.md; results.csv for the numbers):
 - index: Postgres full text (GIN over a generated tsvector) and pgvector
   (all-MiniLM-L6-v2, 384 dimensions, normalised, cosine distance)
 - retrieval: keyword (rank divided by length) and vector, top 50 each, merged by
-  reciprocal rank fusion; optionally re-ordered by a cross-encoder
+  reciprocal rank fusion; the top 20 re-ordered by a cross-encoder
+- results: Recall@5 0.649 on tuning (run 19), 0.691 on the held-out questions (run 20)
 
 The full code: build_chunks.py, embed_chunks.py, retrieve_chunks.py, rerank.py.
 If the final configuration changes, change FINAL_STRATEGY, the keyword function in
@@ -27,7 +28,7 @@ from retrieve_chunks import ChunkHit, chunk_texts, hybrid_c, keyword_norm_c
 from sentence_transformers import SentenceTransformer
 
 FINAL_STRATEGY = "headings_split"
-USE_RERANKER = False
+USE_RERANKER = True  # kept: +5.9 Recall@5, +11.1 MRR@5 (run 19)
 TOP_K = 5
 POOL = 20  # candidates for the reranker
 
