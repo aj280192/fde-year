@@ -17,7 +17,7 @@ citations and abstaining come in week 6.
   (flattened tables). About 1 in 5 makes sense on its own; the rest are headings, contents entries, list
   items or half-sentences that depend on what's around them (*Reading the data*, capstone README).
 - **The embedding model reads 256 tokens,** so the text past that point in long paragraphs is never
-  embedded (`embed.py` reports how many: ⏳ add your count).
+  embedded (`embed.py` reported 156 paragraphs over 256 tokens).
 
 ## How retrieval is measured
 
@@ -40,7 +40,7 @@ citations and abstaining come in week 6.
 | 2 | keyword, any word | 0.168 | 0.117 | 0.330 | |
 | 3 | keyword, any word, rank divided by length | 0.226 | 0.156 | 0.474 | |
 | 4 | vector (all-MiniLM-L6-v2, cosine) | 0.473 | 0.390 | 0.621 | |
-| 5 | hybrid: runs 2 and 4 merged by reciprocal rank fusion | 0.531 | 0.461 | 0.654 | |
+| 5 | hybrid: runs 2 and 4 merged by reciprocal rank fusion | 0.531 | 0.468 | 0.654 | |
 
 - **Requiring every word fails:** it finds nothing for 72% of questions (*run 1*). Real questions use words
   the paragraph doesn't.
@@ -50,14 +50,21 @@ citations and abstaining come in week 6.
   underlying fix is to stop retrieving 16,000-character units at all (chunking, below).
 - **Merging by rank, not score:** keyword scores (`ts_rank_cd`) and cosine distances are on different
   scales, so they can't be added. Reciprocal rank fusion adds 1 / (60 + rank) from each list, so a
-  paragraph ranked well by *both* rises to the top. Each list contributes its top 50. ⏳ Result: *run 5*
-  against *runs 3 and 4*.
+  paragraph ranked well by *both* rises to the top. Each list contributes its top 50.
+  **Result:** hybrid beats vector alone by 5.8 points of Recall@5 (0.473 → 0.531) and 7.8 points of
+  MRR@5 (0.390 → 0.468) (*run 4 → run 5*), even though the keyword list it adds is weak on its own
+  (0.168, *run 2*). The two lists find different paragraphs: keyword search catches exact terms
+  (disease and drug names) that the embedding blurs, and a paragraph both rank well goes to the top.
+  Vector search is the stronger half on this data: 0.473 against 0.226 for the best keyword run (*run 3*).
 
 ## top_k
 
 **Retrieve 20, pass 5 to the model.** Five keeps the prompt short and the citations checkable. The gap
 between Recall@5 and Recall@20 is large (0.226 against 0.474 in *run 3*): many right answers are found
-but ranked 6 to 20, which is exactly what a reranker over the top 20 can fix. ⏳ Confirm with *run 5*.
+but ranked 6 to 20, which is exactly what a reranker over the top 20 can fix. For hybrid (*run 5*),
+Recall@5 is 0.531 and Recall@20 is 0.654: 12.3 points of labelled paragraphs are retrieved but ranked
+too low, and that's the most a reranker can add. The other 35% aren't in the top 20 at all, so they
+need better chunking, not reranking. That's why chunking is tried first.
 
 ## Chunking and metadata ⏳
 

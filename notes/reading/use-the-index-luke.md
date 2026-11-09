@@ -67,8 +67,6 @@ The database often picks a hash join **even when an index exists**: for 100,000 
 
 On a 50,000-row `tasks` table, in Postgres 17 (Docker, `pgvector/pgvector:pg17`), after `VACUUM ANALYZE`.
 
-> Fill in the "What I saw" column from your own `EXPLAIN` output, and replace any expectation that turned out different.
-
 | # | Query | Index | Expected first plan line |
 | --- | --- | --- | --- |
 | 1a | `WHERE lower(email) = 'user42@example.com'` | on `email` | `Seq Scan`: the function defeats the index |

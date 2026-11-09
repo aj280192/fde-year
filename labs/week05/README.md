@@ -20,9 +20,6 @@ uv run alembic upgrade head         # from labs/week05
 export TEST_DATABASE_URL=postgresql+psycopg://postgres:dev@localhost:5432/tasks_test
 uv run pytest labs/week05 -q        # repository and service tests run on memory and Postgres
 
-## Results
-(Saturday: query times before and after the indexes go here.)
-
 ### A lost update, then prevented with `FOR UPDATE`
 
 A user cancels a running task (session A) while a worker marks it succeeded (session B). Both read
