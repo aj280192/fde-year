@@ -4,7 +4,7 @@ It behaves exactly like InMemoryTaskRepository, and must pass the same tests. Ea
 transaction. Nothing outside this file sees a TaskRow: services only ever get domain objects.
 """
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 from domain.idempotency import IdempotencyRecord
 from domain.task import Task, TaskError, TaskState
@@ -106,7 +106,7 @@ class PostgresTaskRepository:
             return IdempotencyRecord(
                 fingerprint=row.fingerprint,
                 task_id=row.task_id,
-                created_at=row.created_at,
+                created_at=row.created_at.astimezone(UTC),
             )
 
     def put_idempotency(self, owner: str, key: str, record: IdempotencyRecord) -> None:
@@ -144,8 +144,10 @@ def _to_domain(row: TaskRow) -> Task:
         input=row.input,
         result=row.result,
         error=error,
-        created_at=row.created_at,
-        updated_at=row.updated_at,
+        # Postgres returns times in the session's time zone; the domain keeps UTC, so the
+        # API shows the same times from either store, whatever the server's setting.
+        created_at=row.created_at.astimezone(UTC),
+        updated_at=row.updated_at.astimezone(UTC),
     )
 
 

@@ -23,6 +23,7 @@ from sqlalchemy import (
     and_,
     func,
     or_,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -76,6 +77,16 @@ class TaskRow(Base):
         # Serves list_for_owner exactly: filter by tenant, then newest first with id as the
         # tie-breaker (Use the Index, Luke: equality column first, then the sort columns).
         Index(None, "tenant_id", "created_at", "id"),
+        # Only active tasks (about 10% of rows): counts of a tenant's active work become
+        # an index-only scan, at 744 kB against 55 MB for a full index (week 5 README, Results).
+        Index(
+            "ix_tasks_active",
+            "tenant_id",
+            "state",
+            postgresql_where=text(
+                "state IN ('queued', 'running', 'waiting_for_input')"
+            ),
+        ),
         # Built from TaskState, so the database and the domain can never disagree.
         CheckConstraint(state.in_([s.value for s in TaskState]), name="state_valid"),
         CheckConstraint(func.length(input).between(1, 10_000), name="input_length"),

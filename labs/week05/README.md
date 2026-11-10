@@ -1,90 +1,90 @@
-# fde-year
+# Week 5 · the task API on Postgres
 
-One year of building production AI agent systems in public, from 5 October 2026 to 3 October 2027.
+## Schema
 
-I come from ML research and platform work. This repository is where I close the gap to production engineering: typed and tested services, agents on the Model Context Protocol, evaluation, security, and systems that hold up under load.
-
-## What is here
-
-```text
-fde-year/
-  notes/        weekly notes, reading notes, and a log of practice reps
-  labs/         small weekly exercises, one folder per week
-  capstones/    four larger projects that build on each other, plus one RAG project
+```mermaid
+erDiagram
+    tenants ||--o{ tasks : owns
+    tenants ||--o{ idempotency_keys : owns
+    tasks ||--o{ idempotency_keys : "created by"
+    tasks ||--o{ runs : "attempted by"
+    runs ||--o{ tool_calls : makes
 ```
 
-## Capstones
+## Run it
+docker start pg
+export DATABASE_URL=postgresql+psycopg://postgres:dev@localhost:5432/tasks
+uv run alembic upgrade head         # from labs/week05
 
-| # | Project | Weeks | Status |
-| --- | --- | --- | --- |
-| 1 | An operations agent that diagnoses faults in a Kubernetes cluster through MCP servers | 9 to 18 | Not started |
-| 2 | An evaluation and safety harness for that agent: benchmark, traces, red-team report | 19 to 26 | Not started |
-| 3 | The agent as a multi-tenant platform on a public cloud, with a load test and a cost model | 27 to 36 | Not started |
-| 4 | A healthcare agent on synthetic records, built for a real user from discovery to handover | 37 to 44 | Not started |
-| 5 | A RAG assistant on public health guidelines: hybrid search, citations, an abstain rule, then a LangGraph retrieve-verify-answer graph | 5 to 24, alongside the others | Part 1 done: retrieval, measured ([capstones/05-health-rag](capstones/05-health-rag)) |
+## Test it
+export TEST_DATABASE_URL=postgresql+psycopg://postgres:dev@localhost:5432/tasks_test
+uv run pytest labs/week05 -q        # repository and service tests run on memory and Postgres
 
-Project 5 uses the Malawi health guidelines dataset published on Zindi under [CC BY-NC-ND 4.0](https://creativecommons.org/licenses/by-nc-nd/4.0/). The data, chunks and embeddings are not committed. Download the files from Zindi to run it.
+### A lost update, then prevented with `FOR UPDATE`
 
-## The year in six phases
+A user cancels a running task (session A) while a worker marks it succeeded (session B). Both read
+the state first, as `services.cancel_task` does.
 
-| Phase | Weeks | Focus |
+| | Without a lock | With `SELECT … FOR UPDATE` |
 | --- | --- | --- |
-| 1 | 1 to 8 | Production engineering: Python, APIs, SQL, TypeScript, testing, deployment |
-| 2 | 9 to 18 | Agents and MCP |
-| 3 | 19 to 26 | Evaluation, observability, reliability, security |
-| 4 | 27 to 36 | Scale, access control, inference platforms, cloud |
-| 5 | 37 to 44 | Working with a real user, design documents, technical writing |
-| 6 | 45 to 52 | Review and consolidation |
+| A reads | `running` | `running`, and locks the row |
+| B reads | `running` | **waits** for A's lock (about 1 s in the demo) |
+| A writes `cancelled`, commits | ✓ | ✓, and the lock is released |
+| B | writes `succeeded` on stale information, commits | its read returns `cancelled`; `cancelled → succeeded` is illegal, so it refuses |
+| **Final state** | **`succeeded`: the cancel is lost, and the task made an illegal move** | **`cancelled`: correct** |
 
-## Working rules
+**What this means:** `FOR UPDATE` locks the row from the read until the commit, so a second
+transaction's read waits and then sees the new value. The lock only helps if the read, the check
+and the write are **one transaction**. In the API today they aren't: the service reads and checks
+(`get_task`, `task.cancel`), and `save` writes, in separate transactions. Locking inside `save`
+alone would not prevent this. The fix to choose (DESIGN.md section 14, row 6):
 
-- Public or synthetic data only. Nothing here comes from an employer's code, data or systems.
-- Third-party datasets are credited and kept out of git, as their licences require.
-- No secrets in the repository. Keys live in a local `.env` file that git ignores.
-- Every capstone ships with a design document, tests, and measured results.
-- A weekly note goes into `notes/` every Sunday: what I built, what broke, what is next.
+- a conditional update: `UPDATE tasks SET … WHERE id = :id AND state = :expected`, where zero rows
+  updated means someone else changed the task first (compare-and-set; holds no lock between calls)
+- or a unit of work that keeps one transaction across the whole service call (*Architecture
+  Patterns* ch. 6)
 
-## Toolchain
+### Claiming a task: `FOR UPDATE SKIP LOCKED`
 
-Python is managed with [uv](https://docs.astral.sh/uv/). Code is linted and formatted with ruff, type-checked with pyright in strict mode, and tested with pytest. A pre-commit hook runs the lint and format checks before every commit.
+`claim.sql` is the query a worker runs to take one queued task. In `claim_demo.py`, two workers
+claim at the same moment, without committing: worker 1 gets `t_q1`, worker 2 **skips the locked
+row** and gets `t_q2`, and neither waits. After both commit, `t_q1` and `t_q2` are `running` and
+`t_q3` is still `queued`. Without `SKIP LOCKED`, worker 2 would wait for worker 1 to finish;
+without `FOR UPDATE`, both could take `t_q1`.
+
+### Run them
 
 ```bash
-uv sync                      # install dependencies
-uv run pre-commit install    # enable the commit hook, once per clone
-uv run ruff check .          # lint
-uv run ruff format .         # format
-uv run pyright               # type-check
-uv run pytest                # test
+export TEST_DATABASE_URL=postgresql+psycopg://postgres:dev@localhost:5432/tasks_test
+cd labs/week05
+uv run python race_demo.py
+uv run python claim_demo.py
 ```
 
-## Labs so far
+Both use the **test** database only: `claim_demo.py` empties it first.
 
-| Week | Folder | What it is |
-| --- | --- | --- |
-| 2 | [labs/week02/toolkit](labs/week02/toolkit) | A packaged Python toolkit: strict Pydantic models with a tagged union, typed settings, JSON logging, coded errors, and a CLI with exit codes. Built as a wheel and tagged `toolkit-v0.1.0`. |
-| 3 | [labs/week03](labs/week03) | A resilient LLM gateway for any OpenAI-compatible model: async client with retries, full-jitter backoff, `Retry-After`, a time budget and a concurrency limit, plus a `POST /ask` SSE endpoint with heartbeats, error events and disconnect handling. Tested against a fake model server with six failure modes (35 tests). |
-| 4 | [labs/week04](labs/week04) | An HTTP API for long-running agent tasks, designed before it was built ([DESIGN.md](labs/week04/DESIGN.md)): create returns 202, API keys with read and write scopes, idempotent create, opaque cursor paging, one error shape. Refactored into domain, repository, service and API layers with an architecture test (167 tests, `openapi.json` committed). |
-| 5 | [labs/week05](labs/week05) | The same API on Postgres: an Alembic-managed schema, a repository that passes the same tests as the in-memory one, a million-row index lab (235× and 42× faster with a composite and a partial index), and demos of a lost update and of `FOR UPDATE SKIP LOCKED`. |
-| 5 | [capstones/05-health-rag](capstones/05-health-rag) | Retrieval over six health-guideline booklets: keyword, vector and hybrid search in Postgres, a labelled test set with a held-out split, chunking experiments and a cross-encoder reranker, every run recorded in `results.csv`. Design: [Q1_Retrieval_Design.md](capstones/05-health-rag/Q1_Retrieval_Design.md). |
+## Results
 
-To try week 3 by hand against a local [Ollama](https://ollama.com) model:
+### One million tasks, two slow queries
 
-```bash
-uv run python labs/week03/serve.py
-curl -N -X POST localhost:8000/ask -H 'content-type: application/json' \
-     -d '{"question": "Why do pods restart?"}'
-```
+1,000,000 tasks across 50 tenants (20,000 each; 90% finished, 10% active), after `VACUUM ANALYZE`.
+Postgres 17 in Docker. Times are Execution Time from `EXPLAIN (ANALYZE, BUFFERS)`.
 
-## Progress
+| Query | Before | After | Faster | Pages read | Index | Plan before → after |
+| --- | --- | --- | --- | --- | --- | --- |
+| A tenant's newest 20 tasks (the list endpoint) | 28.2 ms | 0.12 ms | 235× | 13,157 → 25 | `(tenant_id, created_at, id)` | Parallel Seq Scan + top-N heapsort → `Index Scan Backward`, no sort |
+| Active tasks by state, one tenant | 28.6 ms | 0.69 ms | 42× | 13,141 → 5 | partial: `(tenant_id, state) WHERE state IN ('queued', 'running', 'waiting_for_input')` | Parallel Seq Scan + sort → `Index Only Scan`, 0 heap fetches |
 
-| Week | Dates | Topic | Note |
-| --- | --- | --- | --- |
-| 1 | 5 to 11 Oct 2026 | Baseline and setup | [notes/week01.md](notes/week01.md) |
-| 2 | 12 to 18 Oct 2026 | Production Python | [notes/week02.md](notes/week02.md) |
-| 3 | 19 to 25 Oct 2026 | Async, streaming and failure handling | [notes/week03.md](notes/week03.md) |
-| 4 | 26 Oct to 1 Nov 2026 | API design | [notes/week04.md](notes/week04.md) |
-| 5 | 2 to 8 Nov 2026 | Data and SQL; retrieval you can measure | [Q1_Retrieval_Design.md](capstones/05-health-rag/Q1_Retrieval_Design.md) |
+Index sizes: the partial index is **744 kB**; the full composite index is **55 MB**, 74 times larger.
 
-## Licence
-
-MIT. See [LICENSE](LICENSE).
+**What I noticed:**
+- Before the indexes, both queries read the whole table (about 13,000 pages) to return 20 rows or 3 counts.
+  Every page was already in memory (`shared hit`, no `read`), so 28 ms is the *best* case;
+  reading from disk would be far slower.
+- The planner's estimates were close (about 20,300 rows estimated for tenant_07, 20,000 actual),
+  because `ANALYZE` had run. Bad estimates weren't the problem; the missing index was.
+- The partial index holds only active tasks, about 10% of rows, so it's tiny, and it answers the count
+  from the index alone. `Heap Fetches: 0` means `VACUUM` had marked the pages all-visible, so the table
+  was never touched.
+- The composite index is the one the initial migration already creates. This lab is the evidence for it.
+  The partial index isn't in a migration yet: that's a second Alembic revision (follow-up).
