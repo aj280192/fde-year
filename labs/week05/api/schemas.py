@@ -70,3 +70,8 @@ class ErrorBody(BaseModel):
 
 class ErrorResponse(BaseModel):
     error: ErrorBody
+
+
+class AskRequest(BaseModel):
+    model_config = ConfigDict(strict=True, extra="forbid")
+    question: str = Field(min_length=1, max_length=2000)

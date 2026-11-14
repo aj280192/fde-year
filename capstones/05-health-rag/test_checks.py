@@ -81,3 +81,24 @@ def test_a_score_equal_to_the_threshold_answers() -> None:
 def test_only_the_top_score_matters() -> None:
     sources = [source("B6:154", score=4.0), source("B3:22", score=-8.0)]
     assert check_retrieval(sources, threshold=0.0) is None
+
+
+def test_thinking_is_removed_before_checking() -> None:
+    from checks import strip_thinking
+
+    raw = "<think>\nThe user asks about [B9:999]. Source B6:154 says…\n</think>\n\nReport within 24 hours [B6:154]."
+    text = strip_thinking(raw)
+    assert text == "Report within 24 hours [B6:154]."
+    assert check_answer(text, {"B6:154"}) == (
+        None,
+        ["B6:154"],
+    )  # the id in the thinking isn't counted
+
+
+def test_text_without_thinking_is_unchanged() -> None:
+    from checks import strip_thinking
+
+    assert (
+        strip_thinking("  Report within 24 hours [B6:154].  ")
+        == "Report within 24 hours [B6:154]."
+    )

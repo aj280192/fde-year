@@ -193,13 +193,117 @@ a cross-encoder (run 19 on tuning, run 20 held out).
 
 ## Part 3 · Answering with citations (week 6)
 
-    uv run python ingest.py          # booklets → paragraphs
-    uv run python index.py           # paragraphs → headings_split chunks + vectors
-    uv run python calibrate.py       # chooses ABSTAIN_THRESHOLD (no model calls)
-    uv run python rag.py "<question>" [--trace]
+A question goes in; an answer comes out that uses only the booklets and cites the paragraph behind each
+sentence, or the system says `cannot find in sources`. The refusal is enforced in code, before and after
+the model, not just requested in the prompt: a model can ignore a prompt, but not an `if`.
 
-Model: qwen3.8, served by Ollama at http://localhost:11434/v1 (set HEALTH_RAG_MODEL).
+```bash
+uv run python ingest.py          # booklets → paragraphs (5,226)
+uv run python index.py           # paragraphs → headings_split chunks + vectors (5,902)
+uv run python calibrate.py       # chooses ABSTAIN_THRESHOLD from data (no model calls)
+uv run python rag.py "<question>" [--trace]
+```
 
-**The abstain rule, in code:** (the five-row table from step 5.1)
+The model runs locally in Ollama, through its OpenAI-compatible API at `http://localhost:11434/v1`,
+using the week 3 client (timeouts, retries with backoff, temperature 0). Choose it with
+`HEALTH_RAG_MODEL`, and the database with `HEALTH_RAG_DATABASE_URL`.
 
-**The threshold:** -2.0. It keeps 95.3% of the 596 tuning questions and rejects 10 of 10 questions.
+| File | Does |
+| --- | --- |
+| `ingest.py` | reads the six booklets into `paragraphs` (was `load.py`) |
+| `index.py` | builds and embeds the final chunking (`headings_split`) |
+| `config.py` | every setting in one place: strategy, pool, top k, threshold, model |
+| `checks.py` | the abstain rules, as pure functions (`check_retrieval`, `check_answer`) |
+| `rag.py` | retrieve, number the sources, prompt, generate, check; `--trace` |
+| `calibrate.py` | scores the tuning questions and `unanswerable.txt` to choose the threshold |
+| `unanswerable.txt` | ten questions the booklets can't answer, written for calibration |
+
+### How an answer is made
+
+1. **Retrieve:** hybrid search (length-penalised keyword list and vectors, merged by rank) takes 20
+   candidates; the cross-encoder re-scores them, and the best 5 become the sources.
+2. **Number them:** each source gets an id from its booklet and paragraph, such as `[B6:154]`
+   (`[B6:154#2]` for a second piece of one split paragraph). For a chunk with its heading attached, the
+   id names the content paragraph, not the heading.
+3. **Check before the model:** if the best source's score is below the threshold, refuse now. The model
+   is never called, so an off-topic question costs only retrieval time.
+4. **Prompt:** the rules in the system message (only the sources, cite every sentence with an exact id,
+   otherwise reply `cannot find in sources`), then the numbered sources and the question.
+5. **Check after the model:** the answer must cite at least one id, and only ids it was given.
+6. **Return** the answer and the sources it cited, in order of first mention.
+
+### The abstain rule
+
+| Reason | When | Is the model called? |
+| --- | --- | --- |
+| `no_sources` | retrieval returned nothing | no |
+| `low_retrieval_score` | the best source scores below `ABSTAIN_THRESHOLD` | no |
+| `model_abstained` | the model replied `cannot find in sources` | yes |
+| `no_citations` | the answer cites nothing, so nothing in it can be checked | yes |
+| `unknown_citation` | the answer cites an id it wasn't given: an invented source | yes |
+
+The rules are pure functions in `checks.py`, tested without a model or a database (`test_checks.py`,
+`test_rag.py`).
+
+### The threshold: −2.0, chosen from data
+
+`calibrate.py` ran retrieval, without the model, for the 596 tuning questions (each has a labelled
+paragraph, so the booklets do answer it) and for ten questions the booklets can't answer: four clearly
+off-topic (programming, baking, a capital city, mortgages) and six near misses (health questions
+outside the booklets' scope, such as vitamin D, acne treatment, contact lenses, braces). It records the
+cross-encoder score of the best source. The held-out questions weren't used.
+
+| | Questions | Minimum | 5th percentile | Median | Maximum |
+| --- | --- | --- | --- | --- | --- |
+| Answerable (tuning) | 596 | −8.91 | −1.75 | 5.45 | 10.65 |
+| Unanswerable (mine) | 10 | −9.72 | −9.53 | −7.20 | **−5.26** |
+
+| Threshold | Answerable kept | Unanswerable refused |
+| --- | --- | --- |
+| −6.0 | 99.0% | 8 of 10 |
+| −5.0 | 98.5% | 10 of 10 |
+| −3.0 | 96.3% | 10 of 10 |
+| **−2.0 (chosen)** | **95.3%** | **10 of 10** |
+| −1.0 | 94.1% | 10 of 10 |
+| 0.0 | 91.3% | 10 of 10 |
+
+**The rule, fixed before looking at the numbers:** the highest threshold that still keeps at least 95%
+of answerable questions. That gives **−2.0: it answers 95.3% of answerable questions (28 of 596 are
+refused) and refuses all ten unanswerable ones.**
+
+**What the numbers say:**
+
+- **The two groups separate cleanly.** The highest-scoring unanswerable question (orthodontic braces,
+  −5.26) is still far below where most answerable questions sit (95% score above −1.75). Even the near
+  misses scored low: the reranker judged that no paragraph answers them, which is right.
+- **−5.0 would also refuse all ten while keeping 98.5%**, 19 more answerable questions. I kept −2.0
+  because −5.0 sits only 0.26 above the highest unanswerable score, and that maximum comes from just
+  ten questions: a new near miss could easily score above it. −2.0 leaves a margin of more than three
+  points.
+- **The cost is 28 refused answerable questions** (4.7%). Their scores (as low as −8.91) overlap the
+  unanswerable ones, so no threshold separates them; they're likely the questions labelled on a bare
+  heading, or phrased far from the booklet's wording (the misses read in week 5). `data/calibration.csv`
+  lists them by id, to read with `show_miss.py`.
+- **The threshold is the first check, not the only one.** A question that passes it can still be
+  refused when the model abstains or cites nothing it was given.
+
+### An example
+
+`What is the capital of France?` is one of the ten calibration questions. Its best source scored −8.51,
+far below −2.0, so `rag.py` refuses it before generation:
+
+    uv run python rag.py "What is the capital of France?" --trace
+
+The trace shows the five retrieved sources marked `← below threshold`, `PROMPT (not sent: abstained
+before generation)`, a generation time of 0 ms, and `DECISION abstained: low_retrieval_score`. The
+model is never called, so a refusal costs only the retrieval time.
+
+### Limits
+
+- **Calibrated on ten unanswerable questions.** Enough to show the groups separate, not to measure a
+  refusal rate; the next step is 50 to 100, written by someone else.
+- **Answers aren't yet scored for correctness.** The checks prove every citation was among the
+  retrieved sources, not that the sentence says what the source says. That needs faithfulness
+  checking (week 21).
+- **One model, one prompt.** A different model may cite less reliably; `no_citations` would rise.
+

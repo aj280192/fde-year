@@ -8,9 +8,11 @@ import services
 from domain.errors import DomainError
 from fastapi import Depends, FastAPI, Header, Query, Response, Security
 from fastapi.exceptions import RequestValidationError
+from fastapi.responses import StreamingResponse
 from fastapi.security import APIKeyHeader
 from repository import InMemoryTaskRepository, TaskRepository
 
+from api.ask import Answerer, ask_events
 from api.auth import READ, WRITE, Principal, hash_key
 from api.errors import (
     ApiError,
@@ -23,7 +25,13 @@ from api.errors import (
     validation_error_handler,
 )
 from api.pagination import decode_cursor, encode_cursor
-from api.schemas import CreateTaskRequest, ErrorResponse, ListTasksResponse, TaskOut
+from api.schemas import (
+    AskRequest,
+    CreateTaskRequest,
+    ErrorResponse,
+    ListTasksResponse,
+    TaskOut,
+)
 
 
 def utc_now() -> datetime:
@@ -39,10 +47,12 @@ def create_app(
     api_keys: Mapping[str, Principal],
     now: Callable[[], datetime] = utc_now,
     repo: TaskRepository | None = None,
+    answerer: Answerer | None = None,
 ) -> FastAPI:
     """Build the app. `api_keys` maps sha256(key) to its owner; `now` and `repo` are injectable.
 
     With no `repo`, each app gets its own empty in-memory repository, so every test starts clean.
+    With no `answerer`, POST /v1/ask answers 501.
     """
     store: TaskRepository = repo if repo is not None else InMemoryTaskRepository()
 
@@ -123,6 +133,17 @@ def create_app(
             store, p.key_id, task_id
         )  # 404 first, so an unknown id isn't a 501
         raise not_implemented("The events stream")
+
+    @app.post("/v1/ask", responses=err(401, 403, 422, 501))
+    async def ask(
+        body: AskRequest, p: Annotated[Principal, Depends(require(READ))]
+    ) -> StreamingResponse:
+        """Answer from the health booklets with citations, or abstain, as server-sent events."""
+        if answerer is None:
+            raise not_implemented("Question answering")
+        return StreamingResponse(
+            ask_events(answerer, body.question), media_type="text/event-stream"
+        )
 
     @app.get("/v1/tasks", responses=err(400, 401, 403, 422))
     async def list_tasks(

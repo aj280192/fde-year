@@ -28,5 +28,5 @@ dev = [
 
 [tool.pyright]
 typeCheckingMode = "strict"
-extraPaths = ["labs/week03"]
+extraPaths = ["labs/week03", "capstones/05-health-rag"]
 exclude = ["**/migrations/versions", "**/.venv", "**/show_miss.py"]
