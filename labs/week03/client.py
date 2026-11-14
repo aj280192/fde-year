@@ -125,12 +125,25 @@ class LLMClient:
         """Close the connection pool. Call once, when the app shuts down."""
         await self._http.aclose()
 
-    def _body(self, prompt: str, *, stream: bool) -> dict[str, object]:
+    def _body(
+        self,
+        prompt: str,
+        *,
+        stream: bool,
+        system: str | None = None,
+        temperature: float | None = None,
+    ) -> dict[str, object]:
+        messages: list[dict[str, str]] = []
+        if system is not None:
+            messages.append({"role": "system", "content": system})
+        messages.append({"role": "user", "content": prompt})
         body: dict[str, object] = {
             "model": self.model,
             "messages": [{"role": "user", "content": prompt}],
             "stream": stream,
         }
+        if temperature is not None:
+            body["temperature"] = temperature
         if stream:
             # OpenAI and Ollama only send the final usage chunk when asked.
             body["stream_options"] = {"include_usage": True}
@@ -168,9 +181,15 @@ class LLMClient:
             raise error_class(f"gave up after {attempt + 1} attempts: {exc}") from exc
         await asyncio.sleep(wait)  # no semaphore slot held while waiting
 
-    async def complete(self, prompt: str) -> str:
+    async def complete(
+        self,
+        prompt: str,
+        *,
+        system: str | None = None,
+        temperature: float | None = None,
+    ) -> str:
         deadline = time.monotonic() + self.total_budget
-        body = self._body(prompt, stream=False)
+        body = self._body(prompt, stream=False, system=system, temperature=temperature)
         for attempt in range(self.max_attempts):
             try:
                 async with self._limit:
@@ -185,9 +204,15 @@ class LLMClient:
                 await self._wait_or_give_up(exc, attempt, deadline)
         raise AssertionError("unreachable")
 
-    async def stream(self, prompt: str) -> AsyncIterator[TextDelta | Usage]:
+    async def stream(
+        self,
+        prompt: str,
+        *,
+        system: str | None = None,
+        temperature: float | None = None,
+    ) -> AsyncIterator[TextDelta | Usage]:
         deadline = time.monotonic() + self.total_budget
-        body = self._body(prompt, stream=True)
+        body = self._body(prompt, stream=True, system=system, temperature=temperature)
         for attempt in range(self.max_attempts):
             yielded = False
             try:

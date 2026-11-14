@@ -190,3 +190,16 @@ Every run is a row of `results.csv`. Recall@5 and MRR@5 are cut at the top 5 chu
 
 **Final setup:** headings + split chunks, hybrid on the length-penalised keyword list and vectors, reranked by
 a cross-encoder (run 19 on tuning, run 20 held out).
+
+## Part 3 · Answering with citations (week 6)
+
+    uv run python ingest.py          # booklets → paragraphs
+    uv run python index.py           # paragraphs → headings_split chunks + vectors
+    uv run python calibrate.py       # chooses ABSTAIN_THRESHOLD (no model calls)
+    uv run python rag.py "<question>" [--trace]
+
+Model: qwen3.8, served by Ollama at http://localhost:11434/v1 (set HEALTH_RAG_MODEL).
+
+**The abstain rule, in code:** (the five-row table from step 5.1)
+
+**The threshold:** -2.0. It keeps 95.3% of the 596 tuning questions and rejects 10 of 10 questions.

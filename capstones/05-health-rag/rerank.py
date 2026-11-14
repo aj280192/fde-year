@@ -19,9 +19,9 @@ def load_reranker() -> CrossEncoder:
     return CrossEncoder(RERANK_MODEL, device="mps")  # "cpu" also works, more slowly
 
 
-def rerank(
+def rerank_scored(
     model: CrossEncoder, question: str, hits: list[ChunkHit], texts: dict[int, str]
-) -> list[ChunkHit]:
+) -> list[tuple[ChunkHit, float]]:
     """The same hits, best first by cross-encoder score; ties keep their original order."""
     if not hits:
         return []
@@ -30,4 +30,11 @@ def rerank(
     )
     scores = [float(s) for s in raw]
     order = sorted(range(len(hits)), key=lambda i: (-scores[i], i))
-    return [hits[i] for i in order]
+    return [(hits[i], scores[i]) for i in order]
+
+
+def rerank(
+    model: CrossEncoder, question: str, hits: list[ChunkHit], texts: dict[int, str]
+) -> list[ChunkHit]:
+    """The same hits, best first by cross-encoder score; ties keep their original order."""
+    return [h for h, _ in rerank_scored(model, question, hits, texts)]
