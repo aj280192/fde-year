@@ -6,7 +6,7 @@
   "scripts": {
     "check": "tsc --noEmit",
     "run": "tsx",
-    "test": "tsx --test *.test.ts"
+    "test": "tsx --test *.test.ts src/*.test.ts reps/*.test.ts"
   },
   "keywords": [],
   "author": "",

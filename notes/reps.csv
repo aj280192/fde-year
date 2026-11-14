@@ -13,3 +13,6 @@ date,prompt,type,result,minutes,time_complexity,space_complexity,what_blocked_me
 2026-11-02,LC1581 Customer Who Visited but Did Not Make Any Transactions,sql join,solved aided,5,-,-,"I had to remember left joint, count, and group by to find customers who visited but did not make any transactions"
 2026-11-02,LC197 Rising Temperature,sql self-join,solved aided,5,-,-,"I tried with lag which cuaused issue with missing previous rows; I had to search and switch to a self-join with datadiff = 1 to get the correct results"
 2026-11-02,LC1280 Students and Examinations,sql join,unsolved,10,-,-,"I was blocked by not knowing cross join and how to use it to generate all combinations of students and exams; I need to review cross join and practice more"
+2026-11-13,LC704 Binary Search (TypeScript),binary search,solved aided,10,O(log n),O(1),"Missed out on the <= part."
+2026-11-13,LC74 Search a 2D Matrix (TypeScript),binary search,solved aided,10,O(log(m*n)),O(1),"Missed out on the `/` and `%` operator to get the middle index."
+2026-11-13,LC3 Longest Substring Without Repeating Characters (TypeScript),sliding window,solved aided›,10,O(n),O(min(n; alphabet)),"Looked up how to create set and how for loop is written in TypeScript."
