@@ -12,6 +12,3 @@ ABSTAIN_TEXT = "cannot find in sources"
 
 LLM_BASE_URL = os.environ.get("HEALTH_RAG_LLM_URL", "http://localhost:11434/v1")
 LLM_MODEL = os.environ.get("HEALTH_RAG_MODEL", "qwen3.8:latest")
-HEALTH_DB = os.environ.get(
-    "HEALTH_RAG_DATABASE_URL", "postgresql://postgres:dev@localhost:5432/health_rag"
-)

@@ -16,6 +16,19 @@ docker start pg
 export DATABASE_URL=postgresql+psycopg://postgres:dev@localhost:5432/tasks
 uv run alembic upgrade head         # from labs/week05
 
+### Asking questions (`POST /v1/ask`, added 14 Nov)
+
+`POST /v1/ask` answers a question from the health booklets in `capstones/05-health-rag`: an `answer` event
+and a `citations` event, or an `abstain` event with the reason, then `done`. The whole answer is checked
+before any of it is sent (DESIGN.md, section 14, row 19). It needs the capstone's database and Ollama:
+
+    export HEALTH_RAG_DATABASE_URL=postgresql://postgres:dev@localhost:5432/health_rag
+    TASKS_API_KEY_HASH=<hash> uv run python labs/week05/serve.py
+    curl -sN -X POST localhost:8000/v1/ask -H "X-API-Key: <key>" -H "Content-Type: application/json" \
+      -d '{"question": "How should specimens be collected for suspected anthrax?"}'
+
+Without `HEALTH_RAG_DATABASE_URL`, the route answers 501.
+
 ## Test it
 export TEST_DATABASE_URL=postgresql+psycopg://postgres:dev@localhost:5432/tasks_test
 uv run pytest labs/week05 -q        # repository and service tests run on memory and Postgres

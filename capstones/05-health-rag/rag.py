@@ -1,5 +1,6 @@
 import argparse
 import asyncio
+import os
 import sys
 import time
 from dataclasses import dataclass
@@ -7,12 +8,11 @@ from pathlib import Path
 from typing import Any
 
 import psycopg
-from checks import Source, check_answer, check_retrieval
+from checks import Source, check_answer, check_retrieval, strip_thinking
 from config import (
     ABSTAIN_TEXT,
     ABSTAIN_THRESHOLD,
     FINAL_STRATEGY,
-    HEALTH_DB,
     LLM_BASE_URL,
     LLM_MODEL,
     POOL,
@@ -198,7 +198,11 @@ async def answer(
 ) -> Answer:
     # 1 · Retrieve, and time it.
     started = time.perf_counter()
-    sources = retrieve_sources(conn, embedder, reranker, question)
+    # Retrieval blocks (database queries and two models), so it runs in a worker thread:
+    # inside the web server, the event loop keeps serving other requests meanwhile.
+    sources = await asyncio.to_thread(
+        retrieve_sources, conn, embedder, reranker, question
+    )
     retrieval_ms = (time.perf_counter() - started) * 1000
 
     # 2 · Before-check: abstain without calling the model.
@@ -209,8 +213,11 @@ async def answer(
     # 3 · Prompt and generate, and time it.
     system, user = build_prompt(sources, question)
     started = time.perf_counter()
-    text = await generate(system, user)
+    raw = await generate(system, user)
     generation_ms = (time.perf_counter() - started) * 1000
+    text = strip_thinking(
+        raw
+    )  # check and show only the final answer, not a <think> block
 
     # 4 · After-checks: the answer must cite only what it was given.
     by_id = {s.id: s for s in sources}
@@ -223,7 +230,7 @@ async def answer(
             generation_ms,
             system_prompt=system,
             user_prompt=user,
-            model_text=text,
+            model_text=raw,  # the reply as the model sent it, for --trace
         )
 
     # 5 · Success: the answer, and the sources it actually cited.
@@ -257,7 +264,7 @@ def main() -> None:
 async def main_async(question: str, *, trace: bool) -> None:
     embedder = load_model()  # from embed.py
     reranker = load_reranker()  # from rerank.py
-    with psycopg.connect(HEALTH_DB) as conn:
+    with psycopg.connect(os.environ["HEALTH_RAG_DATABASE_URL"]) as conn:
         register_vector(conn)  # the question's vector must be sent as a `vector`
         result = await answer(question, conn=conn, embedder=embedder, reranker=reranker)
     if trace:

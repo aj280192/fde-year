@@ -15,4 +15,5 @@ date,prompt,type,result,minutes,time_complexity,space_complexity,what_blocked_me
 2026-11-02,LC1280 Students and Examinations,sql join,unsolved,10,-,-,"I was blocked by not knowing cross join and how to use it to generate all combinations of students and exams; I need to review cross join and practice more"
 2026-11-13,LC704 Binary Search (TypeScript),binary search,solved aided,10,O(log n),O(1),"Missed out on the <= part."
 2026-11-13,LC74 Search a 2D Matrix (TypeScript),binary search,solved aided,10,O(log(m*n)),O(1),"Missed out on the `/` and `%` operator to get the middle index."
-2026-11-13,LC3 Longest Substring Without Repeating Characters (TypeScript),sliding window,solved aided›,10,O(n),O(min(n; alphabet)),"Looked up how to create set and how for loop is written in TypeScript."
+2026-11-13,LC3 Longest Substring Without Repeating Characters (TypeScript),sliding window,solved aided,10,O(n),O(min(n; alphabet)),"Looked up how to create set and how for loop is written in TypeScript."
+2026-11-14,LC1280 Students and Examinations,sql join,solved aided,-,-,-,"Query written with help. The idea I lacked: CROSS JOIN makes every student-subject pair, LEFT JOIN keeps pairs with no exams, and count(column) counts those as 0 where count(*) would give 1. Redo unaided next week."

@@ -305,5 +305,10 @@ model is never called, so a refusal costs only the retrieval time.
 - **Answers aren't yet scored for correctness.** The checks prove every citation was among the
   retrieved sources, not that the sentence says what the source says. That needs faithfulness
   checking (week 21).
+- **A citation proves a source was given, not that the sentence matches it.** In one test the model
+  added "collect from 5 to 10 suspected cases" to an anthrax answer. That rule comes from the viral
+  haemorrhagic fever section ([B6:300]), retrieved alongside the anthrax ones; cited as `[B6:300]`, the
+  sentence would have passed every check. Catching it needs a faithfulness check that compares each
+  sentence with its source (week 21).
 - **One model, one prompt.** A different model may cite less reliably; `no_citations` would rise.
 

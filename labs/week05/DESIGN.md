@@ -23,6 +23,7 @@ The client sends the work with `POST /v1/tasks` and gets back a task id straight
 ### In scope (v1)
 
 - The five routes: create, get, list, events and cancel.
+- Added 14 Nov: `POST /v1/ask`, which answers a question from the health booklets (capstone 5) with citations, or abstains, as server-sent events (section 14, row 19).
 - The task resource: its fields, and its six states with the rules for moving between them.
 - The event stream format: `state_changed`, `log` and `output` events, a heartbeat, and how the stream ends.
 - One error shape for every route.
@@ -426,6 +427,7 @@ Notes on the codes:
 | 16 | Expired idempotency records stay in the table | A periodic `DELETE … WHERE created_at < now() - interval '24 hours'` | Before production |
 | 17 | `runs` and `tool_calls` exist but nothing writes them | The worker records each attempt and each tool call | Phase 2 (capstone 1) |
 | 18 | Times read from Postgres came back in the server's time zone, so the API showed `+08:00` on a database set to Singapore time and `Z` from memory | **Fixed 10 Nov:** the repository converts every time it reads to UTC (`astimezone(UTC)`); the tests pass with the database in UTC and in `Asia/Singapore` | Done |
+| 19 | `POST /v1/ask` checks the whole answer before sending any of it, so the first word arrives only after generation finishes | **Chosen 14 Nov:** for health guidance, unsupported text must never reach the user, and tokens already streamed can't be taken back. Revisit with a model fast enough that the wait matters, by streaming sentence by sentence, each sent only once its citation checks out | When latency is measured with users |
 
 ---
 
