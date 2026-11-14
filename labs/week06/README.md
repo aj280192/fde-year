@@ -72,3 +72,70 @@ through Zod 4. Both columns are real output.
 - **Defaults to remember.** Zod's plain `z.object` silently **drops** unknown keys (like Pydantic's
   default `extra="ignore"`); `z.strictObject` rejects them (`extra="forbid"`). And Zod never converts
   `"5"` to `5` unless asked (`z.coerce`), which matches Pydantic's `strict=True`.
+## A typed client for the task API (Thursday)
+
+A small TypeScript client for the week 4 and 5 task API. Requests are typed from the API's own OpenAPI
+spec, every response is checked with Zod before it's used, errors arrive as `ApiError` with the API's
+stable `reason`, and server-sent events are read as an async generator the caller can cancel.
+
+| File | Does |
+| --- | --- |
+| `src/api.d.ts` | types generated from `labs/week05/openapi.json` with openapi-typescript (don't edit; regenerate) |
+| `src/schemas.ts` | Zod schemas for the responses; a compile-time check fails if they ever differ from the generated types |
+| `src/client.ts` | `createTask`, `getTask`, `listTasks`; every failure as an `ApiError(status, reason, message)` |
+| `src/sse.ts` | `parseSse`: complete events from a byte stream, across chunk boundaries |
+| `src/stream.ts` | `streamEvents` (any SSE URL) and `streamTaskEvents`, both cancellable with an `AbortSignal` |
+| `src/sse.test.ts` | the parser: an event split across chunks, a character split across chunks, several data lines, an early `break` |
+| `src/demo.ts` | the client against the real week 4 server |
+| `src/ask-demo.ts` | `streamEvents` against week 3's real `/ask` stream, then an abort |
+
+```bash
+npx openapi-typescript ../week05/openapi.json -o src/api.d.ts     # after any API change
+
+# against the task API (week 4, in memory)
+uv run python ../week04/api/auth.py                                # prints a key and its hash
+TASKS_API_KEY_HASH=<hash> uv run python ../week04/serve.py
+TASKS_API_KEY=<key> npx tsx src/demo.ts
+
+# against week 3's stream (stop the week 4 server first: both use port 8000)
+(cd ../week03 && uv run uvicorn fake_upstream:app --port 9000)
+(cd ../week03 && LLM_BASE_URL=http://127.0.0.1:9000/v1 uv run python serve.py)
+npx tsx src/ask-demo.ts
+```
+
+**What the demos show** (12 and 14 Nov, against the real servers):
+
+| Call | Result |
+| --- | --- |
+| create twice with the same `Idempotency-Key` | the same task id both times |
+| list with `pageSize: 1`, then the `next_page_token` | one task per page, newest first |
+| get `t_missing` | `ApiError 404 TASK_NOT_FOUND` |
+| stream a task's events | `ApiError 501 NOT_IMPLEMENTED` (no worker yet) |
+| stream week 3's `/ask` | 13 events: the answer's tokens, then `done` with token usage |
+| abort after the first event | the loop stops with `AbortError`, and the connection is closed |
+
+**Decisions:**
+
+- **Every response is `unknown` until Zod checks it.** `res.json()` returns `any`; assigning it to
+  `unknown` keeps that `any` out of the code. There is no `any` in the client's files.
+- **Response schemas use `z.object`, not `z.strictObject`.** They ignore fields they don't know, so the
+  client keeps working when the server adds an optional field, which the week 4 guide says it may.
+- **`result` and `error` use `.exactOptional()`.** Under `exactOptionalPropertyTypes`, the generated
+  `result?: string | null` excludes `undefined`; `.optional()` would add it, and the compile-time check
+  against the spec would fail.
+- **The parser keeps the unfinished end of the buffer.** A chunk can end in the middle of an event, or
+  of a character; only text followed by a blank line is parsed, and the decoder runs with
+  `stream: true`.
+- **Cleanup is in `finally`.** Whether the stream ends, the caller breaks out early, or it's aborted, the
+  reader is cancelled and the connection closes (tested).
+
+**Harder than in Python:**
+
+- **Reading SSE by hand.** In Python I had a library; here the byte stream, the buffering across chunks
+  and the line endings are my code, and each of those was a test.
+- **Nothing is checked unless I check it.** Types vanish at runtime, so every response needs a runtime
+  check as well as a type. Pydantic gives both from one class; here the Zod schema and the generated
+  type are separate, and a compile-time check keeps them in step.
+- **Optional is stricter than `None`.** Under `exactOptionalPropertyTypes`, an optional property can be
+  missing but not `undefined`, so options such as `signal` are added only when given, never set to
+  `undefined`.
