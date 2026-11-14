@@ -27,14 +27,6 @@ from sentence_transformers import CrossEncoder, SentenceTransformer
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "labs" / "week03"))
 from client import LLMClient
 
-SYSTEM_PROMPT = """You answer questions about public health guidelines using ONLY the numbered sources provided.
-Rules:
-1. Use only facts stated in the sources. Do not add outside knowledge.
-2. After every sentence that uses a source, cite it in square brackets with its exact id, e.g. [BX:XXX].
-   Cite several like [BX:XXX][BX:XX]. Never invent an id.
-3. If the sources do not contain the answer, reply with exactly: cannot find in sources
-4. Be brief: at most five sentences."""
-
 
 @dataclass(frozen=True)
 class Answer:
@@ -161,10 +153,31 @@ def retrieve_sources(
     return sources
 
 
+SYSTEM_PROMPT = (
+    "You answer questions about public health guidelines using ONLY the numbered sources the user gives you. "
+    "You write short plain sentences, each ending with the id of the source it came from."
+)
+
+
 def build_prompt(sources: list[Source], question: str) -> tuple[str, str]:
-    """The (system, user) messages: the rules, then the numbered sources and the question."""
-    blocks = [f"[{s.id}] {s.text.strip()}" for s in sources]
-    user = "Sources:\n" + "\n\n".join(blocks) + f"\n\nQuestion: {question.strip()}"
+    """The rules come AFTER the sources, right before the answer: small models follow what they read last."""
+    blocks = "\n\n".join(f"[{s.id}] {s.text.strip()}" for s in sources)
+    user = f"""Sources:
+{blocks}
+
+Question: {question.strip()}
+
+How to answer:
+- Write at most 5 plain sentences. No headings, no bullet points, no bold.
+- End EVERY sentence with the id of the source it came from, copied exactly, e.g. [B6:154].
+  Two sources: [B6:154][B3:22].
+- Only use a source that is about the same disease or topic as the question.
+- If the sources do not answer the question, reply with exactly: {ABSTAIN_TEXT}
+
+Example of the format (different topic):
+Suspected cases must be reported to the district within 24 hours [B6:154]. Samples go to the reference laboratory [B3:22].
+
+Answer:"""
     return SYSTEM_PROMPT, user
 
 
