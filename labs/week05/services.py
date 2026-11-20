@@ -1,4 +1,4 @@
-"""Use cases: create, get, cancel and list tasks.
+"""Use cases: create, get, cancel, retry and list tasks.
 
 Plain functions over a TaskRepository. They take plain values, return domain objects and
 raise DomainErrors. Nothing here knows about HTTP: no status codes, headers or page tokens.
@@ -46,6 +46,19 @@ def cancel_task(repo: TaskRepository, owner: str, task_id: str, now: datetime) -
         # this becomes one conditional UPDATE (DESIGN.md section 14).
         repo.save(cancelled)
     return cancelled
+
+
+def retry_task(
+    repo: TaskRepository,
+    owner: str,
+    task_id: str,
+    now: datetime,
+    new_id: Callable[[], str] = default_task_id,
+) -> Task:
+    task = get_task(repo, owner, task_id)
+    retried = task.retry(new_id(), now)  # raises TaskNotFailed unless the task failed
+    repo.add(retried, owner)  # a new task; the failed one is left as it was
+    return retried
 
 
 def create_task(

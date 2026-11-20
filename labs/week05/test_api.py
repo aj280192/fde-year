@@ -170,6 +170,64 @@ def test_cancel_finished_task_is_409(
     assert unchanged is not None and unchanged.state is finished
 
 
+def fail(app: FastAPI, task_id: str) -> None:
+    """Mark a task failed directly in the store (no worker can fail one yet)."""
+    repo: TaskRepository = app.state.repo
+    task = repo.get(task_id, "alice")
+    assert task is not None
+    repo.save(replace(task, state=TaskState.FAILED))
+
+
+def test_retry_failed_task_creates_a_new_queued_task(
+    client: TestClient, app: FastAPI
+) -> None:
+    task_id = create(client, text="Diagnose crash-looping pods")
+    fail(app, task_id)
+
+    response = client.post(f"/v1/tasks/{task_id}:retry", headers=as_user("alice"))
+
+    assert response.status_code == 202
+    new = response.json()
+    assert new["id"] != task_id
+    assert new["state"] == "queued"
+    assert new["input"] == "Diagnose crash-looping pods"
+    old = client.get(f"/v1/tasks/{task_id}", headers=as_user("alice")).json()
+    assert old["state"] == "failed"  # the original stays failed: FAILED is terminal
+
+
+@pytest.mark.parametrize(
+    "state", [TaskState.QUEUED, TaskState.SUCCEEDED, TaskState.CANCELLED]
+)
+def test_retry_task_that_did_not_fail_is_409(
+    client: TestClient, app: FastAPI, state: TaskState
+) -> None:
+    task_id = create(client)
+    repo: TaskRepository = app.state.repo
+    task = repo.get(task_id, "alice")
+    assert task is not None
+    repo.save(replace(task, state=state))
+
+    response = client.post(f"/v1/tasks/{task_id}:retry", headers=as_user("alice"))
+
+    assert response.status_code == 409
+    assert reason(response) == "TASK_NOT_FAILED"
+    assert stored(app) == 1  # no new task was created
+
+
+def test_retry_another_users_task_is_404(client: TestClient, app: FastAPI) -> None:
+    task_id = create(client, who="alice")
+    fail(app, task_id)
+    response = client.post(f"/v1/tasks/{task_id}:retry", headers=as_user("bob"))
+    assert response.status_code == 404
+
+
+def test_retry_needs_write_scope(client: TestClient, app: FastAPI) -> None:
+    task_id = create(client)
+    fail(app, task_id)
+    response = client.post(f"/v1/tasks/{task_id}:retry", headers=as_user("reader"))
+    assert response.status_code == 403
+
+
 def test_events_is_not_implemented_yet(client: TestClient) -> None:
     task_id = create(client)
     response = client.get(f"/v1/tasks/{task_id}/events", headers=as_user("alice"))

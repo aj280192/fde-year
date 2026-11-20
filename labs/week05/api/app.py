@@ -124,6 +124,18 @@ def create_app(
             services.cancel_task(store, p.key_id, task_id, now())
         )
 
+    @app.post(
+        "/v1/tasks/{task_id}:retry", status_code=202, responses=err(401, 403, 404, 409)
+    )
+    async def retry_task(
+        task_id: str, p: Annotated[Principal, Depends(require(WRITE))]
+    ) -> TaskOut:
+        """Retry a failed task by creating a new queued task with the same input.
+
+        The failed task stays failed. Only a failed task can be retried (else 409).
+        """
+        return TaskOut.from_domain(services.retry_task(store, p.key_id, task_id, now()))
+
     @app.get("/v1/tasks/{task_id}/events", responses=err(401, 403, 404, 501))
     async def task_events(
         task_id: str, p: Annotated[Principal, Depends(require(READ))]

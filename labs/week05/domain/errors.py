@@ -22,6 +22,15 @@ class TaskAlreadyFinished(DomainError):
         self.state = state
 
 
+class TaskNotFailed(DomainError):
+    """Only a failed task can be retried."""
+
+    def __init__(self, task_id: str, state: str) -> None:
+        super().__init__(f"Task '{task_id}' is {state}, not failed.")
+        self.task_id = task_id
+        self.state = state
+
+
 class IdempotencyKeyReused(DomainError):
     """The same idempotency key was sent with a different request."""
 

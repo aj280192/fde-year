@@ -24,6 +24,7 @@ The client sends the work with `POST /v1/tasks` and gets back a task id straight
 
 - The five routes: create, get, list, events and cancel.
 - Added 14 Nov: `POST /v1/ask`, which answers a question from the health booklets (capstone 5) with citations, or abstains, as server-sent events (section 14, row 19).
+- Added 20 Nov: `POST /v1/tasks/{task_id}:retry`, which makes a new queued task from a failed one (section 4).
 - The task resource: its fields, and its six states with the rules for moving between them.
 - The event stream format: `state_changed`, `log` and `output` events, a heartbeat, and how the stream ends.
 - One error shape for every route.
@@ -95,6 +96,7 @@ It doesn't represent a thing that exists. It's an action that changes the state 
 | `GET /v1/tasks` | List my tasks, page by page | 132, 158 | 200 | Yes | Yes |
 | `GET /v1/tasks/{task_id}/events` | Stream a task's events | 122 | 200 | Yes | Yes |
 | `POST /v1/tasks/{task_id}:cancel` | Stop a task | 136 | 200 | No | Yes |
+| `POST /v1/tasks/{task_id}:retry` | Run a failed task again, as a new task | 136 | **202** | No | No |
 
 ### `POST /v1/tasks`
 
@@ -127,6 +129,14 @@ It doesn't represent a thing that exists. It's an action that changes the state 
 - **Cancelling a task that is already cancelled:** 200, with the task returned unchanged. A client that retries a cancel after a network blip gets the same answer, which is what makes cancel idempotent. It's a no-op, not a `cancelled` to `cancelled` transition.
 - **Cancelling a task that already succeeded or failed:** 409 `TASK_ALREADY_FINISHED`. The result can't be undone, and the client needs to know cancel didn't happen.
 - **Errors:** 404 `TASK_NOT_FOUND`, 409 `TASK_ALREADY_FINISHED`.
+
+### `POST /v1/tasks/{task_id}:retry`
+
+- **Request body:** none.
+- **Response:** 202 with a **new** `Task`: new id, same owner and `input`, state `queued`, `created_at` and `updated_at` set to now, `result` and `error` empty.
+- **The original task stays `failed`.** `failed` is terminal (section 6), so retry doesn't move it back to `queued`. It makes the new task a client would otherwise create by hand (section 2, "Automatically retrying failed tasks"). The client chooses to retry; the server never does it on its own.
+- **Not idempotent:** each call makes another task. There is no `Idempotency-Key` and no link from the new task back to the failed one yet.
+- **Errors:** 404 `TASK_NOT_FOUND`, 409 `TASK_NOT_FAILED` when the task is in any state other than `failed`.
 
 ---
 
@@ -290,13 +300,14 @@ Each `TaskEvent` also carries an `id` (for example `ev_000012`, increasing withi
 | Case | Route(s) | HTTP | `status` | `reason` |
 | --- | --- | --- | --- | --- |
 | Route not built yet | events, until there is a worker | 501 | `UNIMPLEMENTED` | `NOT_IMPLEMENTED` |
-| Task id doesn't exist, or belongs to another key | get, events, cancel | 404 | `NOT_FOUND` | `TASK_NOT_FOUND` |
+| Task id doesn't exist, or belongs to another key | get, events, cancel, retry | 404 | `NOT_FOUND` | `TASK_NOT_FOUND` |
 | Body fails validation (missing `input`, extra field, too long) | create | 422 | `INVALID_ARGUMENT` | `INVALID_REQUEST_BODY` |
 | `page_size` out of range | list | 422 | `INVALID_ARGUMENT` | `INVALID_QUERY_PARAMETER` |
 | `page_token` invalid or tampered with | list | 400 | `INVALID_ARGUMENT` | `INVALID_PAGE_TOKEN` |
 | Cancel a task that has already succeeded or failed | cancel | 409 | `FAILED_PRECONDITION` | `TASK_ALREADY_FINISHED` |
+| Retry a task that isn't `failed` | retry | 409 | `FAILED_PRECONDITION` | `TASK_NOT_FAILED` |
 | Missing or bad API key | all | 401 | `UNAUTHENTICATED` | `API_KEY_INVALID` |
-| Valid key without permission for this action | create, cancel | 403 | `PERMISSION_DENIED` | `INSUFFICIENT_PERMISSION` |
+| Valid key without permission for this action | create, cancel, retry | 403 | `PERMISSION_DENIED` | `INSUFFICIENT_PERMISSION` |
 | Same idempotency key, different body | create | 422 | `INVALID_ARGUMENT` | `IDEMPOTENCY_KEY_REUSED` |
 | `Idempotency-Key` header empty or longer than 255 characters | create | 422 | `INVALID_ARGUMENT` | `INVALID_HEADER` |
 | Unexpected server bug (caught by the catch-all `Exception` handler) | all | 500 | `INTERNAL` | `INTERNAL_ERROR` |

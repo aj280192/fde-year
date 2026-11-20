@@ -4,7 +4,7 @@ from dataclasses import dataclass, replace
 from datetime import datetime
 from enum import StrEnum
 
-from domain.errors import TaskAlreadyFinished
+from domain.errors import TaskAlreadyFinished, TaskNotFailed
 
 
 class TaskState(StrEnum):
@@ -70,3 +70,15 @@ class Task:
         if not can_transition(self.state, TaskState.CANCELLED):
             raise TaskAlreadyFinished(self.id, self.state)
         return replace(self, state=TaskState.CANCELLED, updated_at=now)
+
+    def retry(self, new_id: str, now: datetime) -> "Task":
+        """Return a new queued task with the same input. This task stays failed: FAILED is terminal."""
+        if self.state is not TaskState.FAILED:
+            raise TaskNotFailed(self.id, self.state)
+        return Task(
+            id=new_id,
+            state=TaskState.QUEUED,
+            input=self.input,
+            created_at=now,
+            updated_at=now,
+        )

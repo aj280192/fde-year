@@ -10,6 +10,7 @@ from domain.errors import (
     DomainError,
     IdempotencyKeyReused,
     TaskAlreadyFinished,
+    TaskNotFailed,
     TaskNotFound,
 )
 from fastapi import Request
@@ -39,6 +40,8 @@ def from_domain(err: DomainError) -> ApiError:
             return task_not_found(err.task_id)
         case TaskAlreadyFinished():
             return task_already_finished(err.task_id, err.state)
+        case TaskNotFailed():
+            return task_not_failed(err.task_id, err.state)
         case IdempotencyKeyReused():
             return idempotency_key_reused()
         case _:
@@ -73,6 +76,15 @@ def task_already_finished(task_id: str, state: str) -> ApiError:
         status="FAILED_PRECONDITION",
         reason="TASK_ALREADY_FINISHED",
         message=f"Task '{task_id}' is already {state} and can no longer be cancelled.",
+    )
+
+
+def task_not_failed(task_id: str, state: str) -> ApiError:
+    return ApiError(
+        http=409,
+        status="FAILED_PRECONDITION",
+        reason="TASK_NOT_FAILED",
+        message=f"Task '{task_id}' is {state}. Only a failed task can be retried.",
     )
 
 
