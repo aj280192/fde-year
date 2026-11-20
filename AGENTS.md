@@ -48,3 +48,4 @@ Stop and ask. Say the plan before writing code, and list every file you will cha
 - A change under 2 points of Recall@5 is noise; do not call it a win.
 - pgvector: normalise embeddings and pass them as a `vector`, not a Python list.
 - Endpoints are versioned: `/v1/ask`, not `/ask`.
+- If my instructions conflict with the tests or DESIGN.md, stop and say so before writing code.
