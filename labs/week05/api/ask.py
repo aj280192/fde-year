@@ -29,15 +29,43 @@ class Citation:
 
 
 @dataclass(frozen=True)
+class Source:
+    id: str  # "B6:154"
+    booklet: int
+    paragraph: int
+    score: float  # cross-encoder score, higher is more relevant
+    text: str
+
+
+@dataclass(frozen=True)
 class AskResult:
     text: str
     abstained: bool
     reason: str | None  # why it abstained; None when it answered
     citations: list[Citation]
+    sources: list[Source]  # everything retrieved, best first
 
 
 class Answerer(Protocol):
     async def __call__(self, question: str) -> AskResult: ...
+
+
+def sources_event(sources: list[Source]) -> str:
+    return sse_event(
+        "sources",
+        {
+            "sources": [
+                {
+                    "id": s.id,
+                    "booklet": s.booklet,
+                    "paragraph": s.paragraph,
+                    "score": round(s.score, 3),
+                    "text": s.text,
+                }
+                for s in sources
+            ]
+        },
+    )
 
 
 def sse_event(event: str, data: dict[str, object]) -> str:
@@ -63,6 +91,7 @@ async def ask_events(answerer: Answerer, question: str) -> AsyncIterator[str]:
         return
     if result.abstained:
         yield sse_event("abstain", {"text": result.text, "reason": result.reason})
+        yield sources_event(result.sources)  # new
     else:
         yield sse_event("answer", {"text": result.text})
         yield sse_event(
@@ -74,4 +103,5 @@ async def ask_events(answerer: Answerer, question: str) -> AsyncIterator[str]:
                 ]
             },
         )
+        yield sources_event(result.sources)  # new
     yield sse_event("done", {})
