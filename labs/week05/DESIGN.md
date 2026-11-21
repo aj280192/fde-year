@@ -25,6 +25,7 @@ The client sends the work with `POST /v1/tasks` and gets back a task id straight
 - The five routes: create, get, list, events and cancel.
 - Added 14 Nov: `POST /v1/ask`, which answers a question from the health booklets (capstone 5) with citations, or abstains, as server-sent events (section 14, row 19).
 - Added 20 Nov: `POST /v1/tasks/{task_id}:retry`, which makes a new queued task from a failed one (section 4).
+- Added 21 Nov: a `sources` event on `POST /v1/ask`, with every retrieved paragraph, its score and its text, sent after an answer and after an abstention (section 4).
 - The task resource: its fields, and its six states with the rules for moving between them.
 - The event stream format: `state_changed`, `log` and `output` events, a heartbeat, and how the stream ends.
 - One error shape for every route.
@@ -97,6 +98,7 @@ It doesn't represent a thing that exists. It's an action that changes the state 
 | `GET /v1/tasks/{task_id}/events` | Stream a task's events | 122 | 200 | Yes | Yes |
 | `POST /v1/tasks/{task_id}:cancel` | Stop a task | 136 | 200 | No | Yes |
 | `POST /v1/tasks/{task_id}:retry` | Run a failed task again, as a new task | 136 | **202** | No | No |
+| `POST /v1/ask` | Answer a question from the health booklets, as server-sent events | none (a stream, not a resource) | 200 | Yes | Yes, but each call reruns the model |
 
 ### `POST /v1/tasks`
 
@@ -137,6 +139,39 @@ It doesn't represent a thing that exists. It's an action that changes the state 
 - **The original task stays `failed`.** `failed` is terminal (section 6), so retry doesn't move it back to `queued`. It makes the new task a client would otherwise create by hand (section 2, "Automatically retrying failed tasks"). The client chooses to retry; the server never does it on its own.
 - **Not idempotent:** each call makes another task. There is no `Idempotency-Key` and no link from the new task back to the failed one yet.
 - **Errors:** 404 `TASK_NOT_FOUND`, 409 `TASK_NOT_FAILED` when the task is in any state other than `failed`.
+
+### `POST /v1/ask`
+
+Added 14 Nov; `sources` event added 21 Nov.
+
+- **Scope:** `tasks:read`. Asking changes nothing on the server, so a read-only key is enough.
+- **Request body:** `AskRequest`, which is `{"question": "<1 to 2,000 characters>"}`. Strict, with no extra fields.
+- **Response:** 200, `text/event-stream`. The whole answer is generated and checked before the first event is sent (section 14, row 19), so the events arrive together.
+- **Events, in order:**
+
+| Outcome | Events |
+| --- | --- |
+| Answered | `answer` → `citations` → `sources` → `done` |
+| Abstained | `abstain` → `sources` → `done` |
+| Failed while answering | `error` → `done` |
+
+| Event | Data | Example |
+| --- | --- | --- |
+| `answer` | `text` | `{"text": "Collect blood before antibiotics [B6:140]."}` |
+| `citations` | `citations`: the paragraphs the answer cites, in order of first mention, each `id`, `booklet`, `paragraph` | `{"citations": [{"id": "B6:140", "booklet": 6, "paragraph": 140}]}` |
+| `abstain` | `text`, `reason` | `{"text": "cannot find in sources", "reason": "low_retrieval_score"}` |
+| `sources` | `sources`: **every** paragraph retrieved, best score first, each `id`, `booklet`, `paragraph`, `score` (cross-encoder, rounded to 3 places, higher is more relevant) and `text`. May be empty | `{"sources": [{"id": "B6:140", "booklet": 6, "paragraph": 140, "score": 0.91, "text": "…"}]}` |
+| `error` | `code`, `message` | `{"code": "answer_failed", "message": "Couldn't produce an answer. Try again."}` |
+| `done` | empty | `{}` |
+
+- **Citations and sources are different lists.** `citations` is what the answer relies on. `sources` is everything retrieved, so a client can show the cited paragraphs and also what else was searched. Every cited id is in `sources`.
+- **Why `sources` is also sent on an abstention:** the user can see what was searched and how weak the matches were, so "cannot find in sources" is explained, not just asserted. This follows *Designing AI Interfaces* ch. 5: grounding is the system using its sources, verifiability is the user being able to check that it did.
+- **Why there are no `sources` after an error:** the answer was not produced, so there is nothing reliable to explain.
+- **A failure after the stream starts is an event, not an HTTP error.** The 200 has already been sent, so the problem is reported in-band as `error`, then `done`, and the connection closes normally.
+- **Without the health RAG configured** (no `HEALTH_RAG_DATABASE_URL`), the route answers 501 before any stream starts.
+- **Errors before the stream:** 401 `API_KEY_INVALID`, 403 `INSUFFICIENT_PERMISSION`, 422 `INVALID_REQUEST_BODY` (empty, too long, or an extra field), 501 `NOT_IMPLEMENTED`.
+- **The source text and the booklet licence:** `sources` sends paragraph text to the client. That is fine on my own machine. The booklet licence forbids sharing altered copies, so a public deployment would need to change this, for example sending ids and scores only and showing text from a licensed copy (section 14, row 20).
+- **Code:** the event contract (`Citation`, `Source`, `AskResult`, `Answerer`, `ask_events`) is in `api/ask.py` and knows nothing about the pipeline. `serve.py` plugs in the real pipeline from `capstones/05-health-rag/rag.py` and converts its `Answer`, sorting sources best first. The tests use fake answerers, with no model or database.
 
 ---
 
@@ -299,9 +334,9 @@ Each `TaskEvent` also carries an `id` (for example `ev_000012`, increasing withi
 
 | Case | Route(s) | HTTP | `status` | `reason` |
 | --- | --- | --- | --- | --- |
-| Route not built yet | events, until there is a worker | 501 | `UNIMPLEMENTED` | `NOT_IMPLEMENTED` |
+| Route not built yet | events, until there is a worker; ask, without the health RAG configured | 501 | `UNIMPLEMENTED` | `NOT_IMPLEMENTED` |
 | Task id doesn't exist, or belongs to another key | get, events, cancel, retry | 404 | `NOT_FOUND` | `TASK_NOT_FOUND` |
-| Body fails validation (missing `input`, extra field, too long) | create | 422 | `INVALID_ARGUMENT` | `INVALID_REQUEST_BODY` |
+| Body fails validation (missing `input` or `question`, extra field, too long) | create, ask | 422 | `INVALID_ARGUMENT` | `INVALID_REQUEST_BODY` |
 | `page_size` out of range | list | 422 | `INVALID_ARGUMENT` | `INVALID_QUERY_PARAMETER` |
 | `page_token` invalid or tampered with | list | 400 | `INVALID_ARGUMENT` | `INVALID_PAGE_TOKEN` |
 | Cancel a task that has already succeeded or failed | cancel | 409 | `FAILED_PRECONDITION` | `TASK_ALREADY_FINISHED` |
@@ -356,7 +391,7 @@ Notes on the codes:
 - **What's stored:** only `sha256(key)` as hex, mapped to a `Principal(key_id, scopes)`. A copy of the stored hashes can't be used to call the API.
 - **Why plain SHA-256 and not bcrypt:** bcrypt is deliberately slow to make guessing weak human passwords expensive. These keys are 256 random bits, which can't be guessed, so a fast hash is the right choice.
 - **Generating a key:** `uv run python labs/week04/auth.py` prints a new key and its hash. The key goes in a password manager; only the hash goes in code or config.
-- **Scopes:** `tasks:read` (get, list, events) and `tasks:write` (create, cancel). A read-only key suits a dashboard: if it leaks, nobody can start or stop work with it.
+- **Scopes:** `tasks:read` (get, list, events, ask) and `tasks:write` (create, cancel, retry). A read-only key suits a dashboard: if it leaks, nobody can start or stop work with it.
 - **Responses:**
   - no key, or an unknown key: 401 `API_KEY_INVALID`
   - a valid key without the route's scope: 403 `INSUFFICIENT_PERMISSION`
@@ -439,6 +474,7 @@ Notes on the codes:
 | 17 | `runs` and `tool_calls` exist but nothing writes them | The worker records each attempt and each tool call | Phase 2 (capstone 1) |
 | 18 | Times read from Postgres came back in the server's time zone, so the API showed `+08:00` on a database set to Singapore time and `Z` from memory | **Fixed 10 Nov:** the repository converts every time it reads to UTC (`astimezone(UTC)`); the tests pass with the database in UTC and in `Asia/Singapore` | Done |
 | 19 | `POST /v1/ask` checks the whole answer before sending any of it, so the first word arrives only after generation finishes | **Chosen 14 Nov:** for health guidance, unsupported text must never reach the user, and tokens already streamed can't be taken back. Revisit with a model fast enough that the wait matters, by streaming sentence by sentence, each sent only once its citation checks out | When latency is measured with users |
+| 20 | The `sources` event sends booklet paragraph text to the client | **Chosen 21 Nov:** fine for a local demo, because it lets the user verify answers and see why the system abstained. The booklet licence forbids sharing altered copies, so before any public deployment send ids and scores only, or show text from a licensed copy | Before anyone outside my machine uses it |
 
 ---
 
@@ -525,17 +561,18 @@ uv run pytest labs/week05 -q                                    # repository and
 
 | File | Layer | What it holds |
 | --- | --- | --- |
-| `domain/task.py` | domain | `TaskState`, `TERMINAL`, `ALLOWED`, `can_transition`, `TaskError`, and `Task` with its `cancel` rule |
-| `domain/errors.py` | domain | `DomainError`, `TaskNotFound`, `TaskAlreadyFinished`, `IdempotencyKeyReused` (no HTTP codes) |
+| `domain/task.py` | domain | `TaskState`, `TERMINAL`, `ALLOWED`, `can_transition`, `TaskError`, and `Task` with its `cancel` and `retry` rules |
+| `domain/errors.py` | domain | `DomainError`, `TaskNotFound`, `TaskAlreadyFinished`, `TaskNotFailed`, `IdempotencyKeyReused` (no HTTP codes) |
 | `domain/idempotency.py` | domain | `TTL`, `IdempotencyRecord`, `fingerprint` |
 | `repository.py` | storage | the `TaskRepository` protocol, `Cursor`, and `InMemoryTaskRepository` |
-| `services.py` | use cases | `create_task`, `get_task`, `cancel_task`, `list_tasks`, and their `Created` and `Page` results |
-| `api/app.py` | HTTP | `create_app`: auth dependencies and the five thin routes |
+| `services.py` | use cases | `create_task`, `get_task`, `cancel_task`, `retry_task`, `list_tasks`, and their `Created` and `Page` results |
+| `api/app.py` | HTTP | `create_app`: auth dependencies and the thin routes, including `/v1/ask` |
 | `api/schemas.py` | HTTP | the Pydantic request and response shapes, including `TaskOut.from_domain` |
 | `api/errors.py` | HTTP | `ApiError`, one helper per reason in 8b, the domain-to-HTTP mapping, and four error handlers |
 | `api/auth.py` | HTTP | `Principal`, `hash_key`, `new_key`, the scope names |
 | `api/pagination.py` | HTTP | `encode_cursor`, `decode_cursor` (a cursor tuple to and from a token) |
-| `serve.py` | | runs the app on port 8000, with the key's hash from `TASKS_API_KEY_HASH` |
+| `api/ask.py` | HTTP | the `/v1/ask` event contract: `Citation`, `Source`, `AskResult`, the `Answerer` protocol, `sources_event`, `ask_events` |
+| `serve.py` | | runs the app on port 8000, with the key's hash from `TASKS_API_KEY_HASH`, and plugs the health RAG pipeline in as the answerer when `HEALTH_RAG_DATABASE_URL` is set |
 | `openapi.json` | | the generated contract |
 
 | Tests | What they cover | Count |
@@ -547,6 +584,7 @@ uv run pytest labs/week05 -q                                    # repository and
 | `test_api.py` | every route end to end through `TestClient` | 53 |
 | `test_pagination.py`, `test_idempotency.py` | the token and fingerprint helpers | 6 |
 | `test_architecture.py` | the layer rule | 8 |
+| `test_ask.py` | `/v1/ask` with fake answerers: event order for answer, abstain and error, the `sources` fields, 501, 401 and 422 | 8 |
 | `db/models.py` | storage | the five tables as SQLAlchemy models (`TenantRow`, `TaskRow`, `IdempotencyKeyRow`, `RunRow`, `ToolCallRow`), with the naming convention |
 | `db/engine.py` | storage | `make_engine(url)` |
 | `db/repository.py` | storage | `PostgresTaskRepository`, and the converters between `TaskRow` and the domain `Task` |

@@ -44,14 +44,14 @@ def build_answerer() -> Answerer | None:
     async def answerer(question: str) -> AskResult:
         async with lock:
             a = await answer(question, conn=conn, embedder=embedder, reranker=reranker)
-            sorted(a.sources, key=lambda s: s.score, reverse=True)
+        ranked = sorted(a.sources, key=lambda s: s.score, reverse=True)
         return AskResult(
             text=a.text,
             abstained=a.abstained,
             reason=a.reason,
             citations=[Citation(c.id, c.booklet, c.paragraph) for c in a.citations],
             sources=[
-                Source(s.id, s.booklet, s.paragraph, s.score, s.text) for s in a.sources
+                Source(s.id, s.booklet, s.paragraph, s.score, s.text) for s in ranked
             ],
         )
 
