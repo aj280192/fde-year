@@ -114,6 +114,10 @@ def run_question(question: str) -> None:
             st.session_state["retryable"] = False
 
 
+def request_retry() -> None:
+    st.session_state["retry"] = True
+
+
 def main() -> None:
     st.set_page_config(page_title="Health booklet assistant")
     st.title("Health booklet assistant")
@@ -125,53 +129,51 @@ def main() -> None:
     with st.form("ask"):
         question = st.text_area("Your question", max_chars=2000)
         submitted = st.form_submit_button("Ask")
-        if submitted:
-            if not question.strip():
-                st.warning("Type a question first.")
-            else:
-                run_question(question.strip())
-
-        reply = st.session_state.get("reply")
-        if reply is None:
-            return
-
-        REASONS = {
-            "low_retrieval_score": "nothing in the booklets matched the question closely enough"
-        }
-
-        if reply.kind == "answer":
-            st.markdown(reply.text)
-            st.caption("Sources cited: " + ", ".join(reply.cited))
-            st.caption(
-                "Generated from the booklets. Check the source before acting on it."
-            )
-        elif reply.kind == "abstain":
-            st.info("I can't find this in the booklets.")
-            st.caption(
-                "Why: " + REASONS.get(reply.reason or "", reply.reason or "unknown")
-            )
-            st.caption(
-                "Try rephrasing, or the question may be outside the six booklets."
-            )
+    if st.session_state.pop("retry", False):
+        run_question(st.session_state["last_question"])
+    elif submitted:
+        if not question.strip():
+            st.warning("Type a question first.")
         else:
-            st.error(reply.text)
+            run_question(question.strip())
 
-        if reply.sources:
-            heading = (
-                "What it searched"
-                if reply.kind == "answer"
-                else "What it searched (none was close enough)"
-            )
-            st.subheader(heading)
-            ordered = sorted(
-                reply.sources, key=lambda s: (s["id"] not in reply.cited, -s["score"])
-            )
-            for s in ordered:
-                mark = " · ✓ cited" if s["id"] in reply.cited else ""
-                with st.expander(f"{s['id']} · score {s['score']:.2f}{mark}"):
-                    st.write(s["text"])
-        elif reply.kind != "error":
-            st.caption("Nothing was retrieved.")
+    reply = st.session_state.get("reply")
+    if reply is None:
+        return
+
+    REASONS = {
+        "low_retrieval_score": "nothing in the booklets matched the question closely enough"
+    }
+
+    if reply.kind == "answer":
+        st.markdown(reply.text)
+        st.caption("Sources cited: " + ", ".join(reply.cited))
+        st.caption("Generated from the booklets. Check the source before acting on it.")
+    elif reply.kind == "abstain":
+        st.info("I can't find this in the booklets.")
+        st.caption("Why: " + REASONS.get(reply.reason or "", reply.reason or "unknown"))
+        st.caption("Try rephrasing, or the question may be outside the six booklets.")
+    else:
+        st.error(reply.text)
+        if st.session_state.get("retryable"):
+            st.button("Retry", on_click=request_retry)
+
+    if reply.sources:
+        heading = (
+            "What it searched"
+            if reply.kind == "answer"
+            else "What it searched (none was close enough)"
+        )
+        st.subheader(heading)
+        ordered = sorted(
+            reply.sources, key=lambda s: (s["id"] not in reply.cited, -s["score"])
+        )
+        for s in ordered:
+            mark = " · ✓ cited" if s["id"] in reply.cited else ""
+            with st.expander(f"{s['id']} · score {s['score']:.2f}{mark}"):
+                st.write(s["text"])
+    elif reply.kind != "error":
+        st.caption("Nothing was retrieved.")
 
 
 if __name__ == "__main__":
