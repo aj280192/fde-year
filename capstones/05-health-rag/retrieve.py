@@ -19,10 +19,11 @@ from typing import Any, LiteralString, NamedTuple
 
 import numpy as np
 import psycopg
-from embed import encode, load_model
 from numpy.typing import NDArray
 from pgvector.psycopg import register_vector
 from sentence_transformers import SentenceTransformer
+
+from embed import encode, load_model
 
 
 class Hit(NamedTuple):

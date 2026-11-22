@@ -9,6 +9,7 @@ Each returns a reason (a short string) to abstain, or None to carry on.
 from __future__ import annotations
 
 import pytest
+
 from config import ABSTAIN_TEXT
 from rag import Source, check_answer, check_retrieval
 

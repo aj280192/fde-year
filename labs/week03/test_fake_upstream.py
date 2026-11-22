@@ -1,8 +1,9 @@
 """Part A: the fake server's failure modes, checked with plain httpx (no retries, no client)."""
 
-import fake_upstream
 import httpx
 import pytest
+
+import fake_upstream
 from fake_upstream import FAKE
 
 BODY = {"model": "fake", "messages": [{"role": "user", "content": "hi"}]}

@@ -15,6 +15,7 @@ from typing import Any, LiteralString, NamedTuple
 import numpy as np
 import psycopg
 from numpy.typing import NDArray
+
 from retrieve import Hit, rrf
 
 

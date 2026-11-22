@@ -14,8 +14,9 @@ import os
 from typing import Any, NamedTuple
 
 import psycopg
-from embed import BATCH_SIZE, MODEL_NAME, encode, load_model, token_counts
 from pgvector.psycopg import register_vector
+
+from embed import BATCH_SIZE, MODEL_NAME, encode, load_model, token_counts
 
 READ_QUERY = """
     SELECT id, booklet, covers, text

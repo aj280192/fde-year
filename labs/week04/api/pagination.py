@@ -9,9 +9,8 @@ import binascii
 import json
 from datetime import datetime
 
-from repository import Cursor
-
 from api.errors import invalid_page_token
+from repository import Cursor
 
 
 def encode_cursor(cursor: Cursor) -> str:

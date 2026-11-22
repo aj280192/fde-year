@@ -23,9 +23,10 @@ from pathlib import Path
 from typing import Any
 
 import psycopg
+from pgvector.psycopg import register_vector
+
 from config import ABSTAIN_THRESHOLD
 from embed import load_model
-from pgvector.psycopg import register_vector
 from rag import retrieve_sources
 from rerank import load_reranker
 

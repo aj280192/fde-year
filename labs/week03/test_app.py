@@ -3,8 +3,9 @@
 import asyncio
 import json
 
-import fake_upstream
 import httpx
+
+import fake_upstream
 from fake_upstream import FAKE
 
 Event = tuple[str, dict[str, object]]

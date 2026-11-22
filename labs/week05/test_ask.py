@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import json
 
+from fastapi.testclient import TestClient
+
 from api.app import create_app
 from api.ask import AskResult, Citation, Source
 from api.auth import READ, Principal, hash_key
-from fastapi.testclient import TestClient
 
 KEY = "sk_test_reader"
 HEADERS = {"X-API-Key": KEY}

@@ -6,6 +6,11 @@ bottom turn them, and FastAPI's own validation errors and unexpected bugs, into 
 
 import logging
 
+from fastapi import Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
+
+from api.schemas import ErrorBody, ErrorDetail, ErrorResponse
 from domain.errors import (
     DomainError,
     IdempotencyKeyReused,
@@ -13,11 +18,6 @@ from domain.errors import (
     TaskNotFailed,
     TaskNotFound,
 )
-from fastapi import Request
-from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
-
-from api.schemas import ErrorBody, ErrorDetail, ErrorResponse
 
 logger = logging.getLogger(__name__)
 

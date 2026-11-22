@@ -3,8 +3,9 @@
 from datetime import datetime
 from typing import Literal
 
-from domain.task import Task, TaskState
 from pydantic import BaseModel, ConfigDict, Field, JsonValue
+
+from domain.task import Task, TaskState
 
 
 class CreateTaskRequest(BaseModel):

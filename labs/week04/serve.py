@@ -7,6 +7,7 @@ TASKS_API_KEY_HASH=<hash> uv run python labs/week04/serve.py
 import os
 
 import uvicorn
+
 from api.app import create_app
 from api.auth import READ, WRITE, Principal
 

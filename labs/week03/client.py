@@ -8,13 +8,14 @@ from types import TracebackType
 from typing import Self
 
 import httpx
+from pydantic import BaseModel, ConfigDict
+
 from errors import (
     RateLimitedError,
     UpstreamDroppedError,
     UpstreamError,
     UpstreamTimeoutError,
 )
-from pydantic import BaseModel, ConfigDict
 
 # Providers add fields over time, so responses ignore unknown fields rather than reject them.
 LENIENT = ConfigDict(extra="ignore")

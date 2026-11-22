@@ -3,9 +3,10 @@
 import asyncio
 import time
 
-import fake_upstream
 import httpx
 import pytest
+
+import fake_upstream
 from client import LLMClient, TextDelta, Usage, classify
 from errors import (
     RateLimitedError,

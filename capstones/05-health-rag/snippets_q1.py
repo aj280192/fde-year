@@ -20,12 +20,13 @@ from typing import Any
 
 import numpy as np
 import psycopg
-from build_chunks import STRATEGIES, Chunk, Paragraph, write_chunks
-from embed import encode
 from numpy.typing import NDArray
 from pgvector.psycopg import register_vector
-from retrieve_chunks import ChunkHit, chunk_texts, hybrid_c, keyword_norm_c
 from sentence_transformers import SentenceTransformer
+
+from build_chunks import STRATEGIES, Chunk, Paragraph, write_chunks
+from embed import encode
+from retrieve_chunks import ChunkHit, chunk_texts, hybrid_c, keyword_norm_c
 
 FINAL_STRATEGY = "headings_split"
 USE_RERANKER = True  # kept: +5.9 Recall@5, +11.1 MRR@5 (run 19)

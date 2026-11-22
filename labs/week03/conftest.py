@@ -4,9 +4,10 @@ import threading
 import time
 from collections.abc import Iterator
 
-import fake_upstream
 import pytest
 import uvicorn
+
+import fake_upstream
 from app import create_app
 from client import LLMClient
 

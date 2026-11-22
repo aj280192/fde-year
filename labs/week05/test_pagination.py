@@ -3,6 +3,7 @@
 from datetime import UTC, datetime
 
 import pytest
+
 from api.errors import ApiError
 from api.pagination import decode_cursor, encode_cursor
 

@@ -16,11 +16,12 @@ from collections.abc import AsyncGenerator, AsyncIterator
 from contextlib import asynccontextmanager
 
 import anyio
-from client import LLMClient, TextDelta, Usage
-from errors import UpstreamError
 from fastapi import FastAPI, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict
+
+from client import LLMClient, TextDelta, Usage
+from errors import UpstreamError
 
 SSE_PING = ": ping\n\n"
 

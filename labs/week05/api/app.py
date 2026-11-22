@@ -4,14 +4,12 @@ from collections.abc import Awaitable, Callable, Mapping
 from datetime import UTC, datetime
 from typing import Annotated
 
-import services
-from domain.errors import DomainError
 from fastapi import Depends, FastAPI, Header, Query, Response, Security
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import StreamingResponse
 from fastapi.security import APIKeyHeader
-from repository import InMemoryTaskRepository, TaskRepository
 
+import services
 from api.ask import Answerer, ask_events
 from api.auth import READ, WRITE, Principal, hash_key
 from api.errors import (
@@ -32,6 +30,8 @@ from api.schemas import (
     ListTasksResponse,
     TaskOut,
 )
+from domain.errors import DomainError
+from repository import InMemoryTaskRepository, TaskRepository
 
 
 def utc_now() -> datetime:

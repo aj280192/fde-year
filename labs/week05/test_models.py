@@ -3,9 +3,10 @@
 from itertools import product
 
 import pytest
+from pydantic import ValidationError
+
 from api.schemas import CreateTaskRequest
 from domain.task import ALLOWED, TERMINAL, TaskState, can_transition
-from pydantic import ValidationError
 
 S = TaskState
 

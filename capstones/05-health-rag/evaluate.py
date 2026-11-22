@@ -31,10 +31,11 @@ from typing import Any
 
 import numpy as np
 import psycopg
-from embed import encode, load_model
-from metrics import mean, mrr_groups_at_k, recall_groups_at_k
 from numpy.typing import NDArray
 from pgvector.psycopg import register_vector
+
+from embed import encode, load_model
+from metrics import mean, mrr_groups_at_k, recall_groups_at_k
 from retrieve import Hit, hybrid, keyword, keyword_all, keyword_norm, vector
 from retrieve_chunks import (
     ChunkHit,

@@ -9,8 +9,9 @@ from __future__ import annotations
 
 from typing import Any, cast
 
-from retrieve_chunks import ChunkHit
 from sentence_transformers import CrossEncoder
+
+from retrieve_chunks import ChunkHit
 
 RERANK_MODEL = "cross-encoder/ms-marco-MiniLM-L-6-v2"
 

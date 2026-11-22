@@ -4,11 +4,12 @@ import os
 from collections.abc import Iterator
 
 import pytest
+from sqlalchemy import Engine, text
+
 from db.engine import make_engine
 from db.models import Base
 from db.repository import PostgresTaskRepository
 from repository import InMemoryTaskRepository, TaskRepository
-from sqlalchemy import Engine, text
 
 TRUNCATE_ALL = "TRUNCATE tool_calls, runs, idempotency_keys, tasks, tenants RESTART IDENTITY CASCADE"
 

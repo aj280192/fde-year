@@ -8,7 +8,6 @@ converts between them.
 from datetime import datetime
 from typing import Any
 
-from domain.task import TaskState
 from sqlalchemy import (
     BigInteger,
     CheckConstraint,
@@ -27,6 +26,8 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+
+from domain.task import TaskState
 
 # Predictable names for every constraint and index, so later migrations can find them.
 NAMING_CONVENTION = {

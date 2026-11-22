@@ -4,6 +4,7 @@ from dataclasses import FrozenInstanceError
 from datetime import UTC, datetime, timedelta
 
 import pytest
+
 from domain.errors import DomainError, TaskAlreadyFinished
 from domain.task import Task, TaskError, TaskState
 

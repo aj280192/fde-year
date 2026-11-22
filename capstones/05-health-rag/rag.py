@@ -8,6 +8,9 @@ from pathlib import Path
 from typing import Any
 
 import psycopg
+from pgvector.psycopg import register_vector
+from sentence_transformers import CrossEncoder, SentenceTransformer
+
 from checks import Source, check_answer, check_retrieval, strip_thinking
 from config import (
     ABSTAIN_TEXT,
@@ -19,10 +22,8 @@ from config import (
     TOP_K,
 )
 from embed import encode, load_model
-from pgvector.psycopg import register_vector
 from rerank import load_reranker, rerank_scored
 from retrieve_chunks import chunk_texts, hybrid_c, keyword_norm_c
-from sentence_transformers import CrossEncoder, SentenceTransformer
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "labs" / "week03"))
 from client import LLMClient

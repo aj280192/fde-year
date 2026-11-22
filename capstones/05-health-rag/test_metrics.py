@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pytest
+
 from metrics import mean, mrr_at_k, mrr_groups_at_k, recall_at_k, recall_groups_at_k
 
 

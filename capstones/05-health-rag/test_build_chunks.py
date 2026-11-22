@@ -3,6 +3,7 @@ from __future__ import annotations
 from itertools import pairwise
 
 import pytest
+
 from build_chunks import (
     LONG,
     Chunk,

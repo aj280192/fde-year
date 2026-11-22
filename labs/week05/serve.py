@@ -13,6 +13,7 @@ import sys
 from pathlib import Path
 
 import uvicorn
+
 from api.app import create_app
 from api.ask import Answerer, AskResult, Citation, Source
 from api.auth import READ, WRITE, Principal
@@ -31,8 +32,9 @@ def build_answerer() -> Answerer | None:
         0, str(Path(__file__).resolve().parents[2] / "capstones" / "05-health-rag")
     )
     import psycopg
-    from embed import load_model
     from pgvector.psycopg import register_vector
+
+    from embed import load_model
     from rag import answer
     from rerank import load_reranker
 

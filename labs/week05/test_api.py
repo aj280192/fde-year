@@ -6,11 +6,12 @@ from datetime import UTC, datetime, timedelta
 from typing import Any, Protocol
 
 import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
 from api.app import create_app
 from api.auth import READ, WRITE, Principal, hash_key
 from domain.task import TaskState
-from fastapi import FastAPI
-from fastapi.testclient import TestClient
 from repository import TaskRepository
 
 # Raw test keys. Real keys come from auth.py's new_key(); simple strings are fine in tests.

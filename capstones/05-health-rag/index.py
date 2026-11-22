@@ -2,8 +2,9 @@ import os
 from dataclasses import dataclass
 from typing import Any
 
-import config
 import psycopg
+
+import config
 from build_chunks import read_paragraphs
 from embed import load_model
 from snippets_q1 import build_index, chunk_documents

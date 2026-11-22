@@ -6,8 +6,6 @@ transaction. Nothing outside this file sees a TaskRow: services only ever get do
 
 from datetime import UTC, datetime
 
-from domain.idempotency import IdempotencyRecord
-from domain.task import Task, TaskError, TaskState
 from psycopg.errors import UniqueViolation
 from sqlalchemy import Engine, select, tuple_
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -15,6 +13,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import sessionmaker
 
 from db.models import IdempotencyKeyRow, TaskRow, TenantRow
+from domain.idempotency import IdempotencyRecord
+from domain.task import Task, TaskError, TaskState
 
 # A position in "newest first" order: (created_at, task id). Tasks strictly before it come next.
 # The same definition as repository.Cursor; kept here so db/ doesn't import the top-level module.
