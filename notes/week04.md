@@ -2,9 +2,6 @@
 
 This week's note is a quick-start guide for engineers calling the agent task API for the first time. The design behind it is in [labs/week04/DESIGN.md](../labs/week04/DESIGN.md), and the code is in [labs/week04](../labs/week04).
 
-> **Before publishing:** run `serve.py` and replace every response below with the real output from your own calls. The ids and times shown are examples.
-
----
 
 # Agent task API · quick start (v1)
 
@@ -28,7 +25,7 @@ Every request sends the key in the `X-API-Key` header. A key has one or both per
 | Permission | Lets you |
 | --- | --- |
 | `tasks:read` | get a task, list your tasks |
-| `tasks:write` | create a task, cancel a task |
+| `tasks:write` | create, cancel or retry a task |
 
 You only ever see **your own** tasks. Another key's task looks exactly like one that doesn't exist.
 
@@ -62,10 +59,22 @@ Keep the `id`. `input` is the only field you can set; sending any other field (s
 **2 · Check on it**
 
 ```bash
-curl -s "$API/v1/tasks/t_Qx3vL9pT2mKa8YdN1rB7cw" -H "X-API-Key: $KEY"
+curl -s "$API/v1/tasks/t_ZRpcjP2ZdIYwU2DkrMpYhA" -H "X-API-Key: $KEY"
 ```
 
 This returns the same shape, with the current `state`. When the state is `succeeded`, the answer is in `result`. When it's `failed`, the reason is in `error`.
+
+```json
+{
+    "id": "t_ZRpcjP2ZdIYwU2DkrMpYhA",
+    "state": "queued",
+    "input": "Diagnose: payments pods crash-looping in namespace payments",
+    "result": null,
+    "error": null,
+    "created_at": "2026-11-23T13:26:15.236843Z",
+    "updated_at": "2026-11-23T13:26:15.236843Z"
+}
+```
 
 **3 · Cancel it** (if you no longer need it)
 
@@ -81,12 +90,42 @@ This returns the task with `"state": "cancelled"`. **Cancelling twice is safe**:
 curl -s "$API/v1/tasks?page_size=2" -H "X-API-Key: $KEY"
 ```
 
+This returns list of tasks and next page token.
+ 
 ```json
 {
-  "tasks": [ { "id": "t_...", "state": "queued", "...": "..." }, { "...": "..." } ],
-  "next_page_token": "eyJ0IjogIjIwMjYtMTEtMDNUMTQ6MDU6MTFaIiwgImlkIjogInRfLi4uIn0="
+    "tasks": [
+        {
+            "id": "t_o0NiXw7zsYkxzeOTiZn83A",
+            "state": "queued",
+            "input": "Diagnose: payments pods crash-looping in namespace payments",
+            "result": null,
+            "error": null,
+            "created_at": "2026-11-23T13:33:18.773840Z",
+            "updated_at": "2026-11-23T13:33:18.773840Z"
+        },
+        {
+            "id": "t_ZRpcjP2ZdIYwU2DkrMpYhA",
+            "state": "queued",
+            "input": "Diagnose: payments pods crash-looping in namespace payments",
+            "result": null,
+            "error": null,
+            "created_at": "2026-11-23T13:26:15.236843Z",
+            "updated_at": "2026-11-23T13:26:15.236843Z"
+        }
+    ],
+    "next_page_token": "eyJ0IjogIjIwMjYtMTEtMjNUMTM6MjY6MTUuMjM2ODQzKzAwOjAwIiwgImlkIjogInRfWlJwY2pQMlpkSVl3VTJEa3JNcFloQSJ9"
 }
 ```
+
+**5 . Retry a failed task**
+
+```bash
+curl -s -X POST "$API/v1/tasks/$ID:retry" -H "X-API-Key: $KEY"
+```
+
+This creates a new queued task with the same input of a failed task, and the failed one stays failed.
+
 
 ## Task states
 
@@ -170,7 +209,7 @@ Every error has the same shape:
 | 500 | `INTERNAL_ERROR` | something went wrong on our side | retry later; if it keeps happening, report it |
 | 501 | `NOT_IMPLEMENTED` | the route exists but isn't built yet (the events stream, in v1) | poll `GET /v1/tasks/{id}` instead |
 
-**Safe to retry automatically:** get, list and cancel, after any network failure or a 500. **Create** is safe to retry only with an `Idempotency-Key`.
+**Safe to retry automatically:** get, list and cancel, after any network failure or a 500. **Create** is safe to retry only with an `Idempotency-Key`. **retry** is not safe to repeat, because each call creates a new task.
 
 ## Limits
 
