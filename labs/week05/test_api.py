@@ -2,60 +2,15 @@
 
 from collections.abc import Mapping
 from dataclasses import replace
-from datetime import UTC, datetime, timedelta
 from typing import Any, Protocol
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from api.app import create_app
-from api.auth import READ, WRITE, Principal, hash_key
 from domain.task import TaskState
 from repository import TaskRepository
-
-# Raw test keys. Real keys come from auth.py's new_key(); simple strings are fine in tests.
-KEYS = {"alice": "sk_test_alice", "bob": "sk_test_bob", "reader": "sk_test_reader"}
-
-
-class FakeClock:
-    """A clock the test controls, passed to create_app as `now`."""
-
-    def __init__(self) -> None:
-        self.current = datetime(2026, 10, 29, 12, 0, tzinfo=UTC)
-
-    def now(self) -> datetime:
-        return self.current
-
-    def advance(self, **kwargs: float) -> None:
-        self.current += timedelta(**kwargs)
-
-
-@pytest.fixture
-def clock() -> FakeClock:
-    return FakeClock()
-
-
-@pytest.fixture
-def app(clock: FakeClock, repo: TaskRepository) -> FastAPI:
-    keys = {
-        hash_key(KEYS["alice"]): Principal(
-            key_id="alice", scopes=frozenset({READ, WRITE})
-        ),
-        hash_key(KEYS["bob"]): Principal(key_id="bob", scopes=frozenset({READ, WRITE})),
-        hash_key(KEYS["reader"]): Principal(key_id="reader", scopes=frozenset({READ})),
-    }
-    return create_app(keys, now=clock.now, repo=repo)
-
-
-@pytest.fixture
-def client(app: FastAPI) -> TestClient:
-    return TestClient(app)
-
-
-def as_user(who: str) -> dict[str, str]:
-    """Headers for a request made with that user's API key."""
-    return {"X-API-Key": KEYS[who]}
+from testing import FakeClock, as_user
 
 
 class JsonResponse(Protocol):
@@ -249,6 +204,7 @@ def test_events_for_unknown_task_is_404_not_501(client: TestClient) -> None:
     [
         ("POST", "/v1/tasks"),
         ("GET", "/v1/tasks/t_any"),
+        ("POST", "/v1/tasks/t_any:retry"),
         ("POST", "/v1/tasks/t_any:cancel"),
         ("GET", "/v1/tasks/t_any/events"),
     ],
@@ -306,25 +262,70 @@ def test_other_user_cannot_cancel(client: TestClient) -> None:
     assert still.json()["state"] == "queued"
 
 
-# ---- Validation: one error shape ----
+# ---- Valiation: every create error ----
 
 
-def test_extra_field_is_rejected_in_our_shape(client: TestClient) -> None:
-    response = client.post(
-        "/v1/tasks", json={"input": "x", "state": "succeeded"}, headers=as_user("alice")
-    )
-    assert response.status_code == 422
-    assert reason(response) == "INVALID_REQUEST_BODY"
+Who = str | dict[str, str]  # a user name from KEYS, or raw headers
+
+
+def headers_for(who: Who, extra: dict[str, str] | None = None) -> dict[str, str]:
+    base = as_user(who) if isinstance(who, str) else dict(who)
+    return base | (extra or {})
 
 
 @pytest.mark.parametrize(
-    "body", [{}, {"input": ""}, {"input": "x" * 10_001}, {"input": 42}]
+    ("who", "extra", "body", "status", "reason_code"),
+    [
+        ({}, None, {"input": "x"}, 401, "API_KEY_INVALID"),
+        ({"X-API-Key": "sk_wrong"}, None, {"input": "x"}, 401, "API_KEY_INVALID"),
+        ("reader", None, {"input": "x"}, 403, "INSUFFICIENT_PERMISSION"),
+        ("alice", None, {}, 422, "INVALID_REQUEST_BODY"),
+        ("alice", None, {"input": ""}, 422, "INVALID_REQUEST_BODY"),
+        ("alice", None, {"input": "x" * 10_001}, 422, "INVALID_REQUEST_BODY"),
+        ("alice", None, {"input": 42}, 422, "INVALID_REQUEST_BODY"),
+        (
+            "alice",
+            None,
+            {"input": "x", "state": "succeeded"},
+            422,
+            "INVALID_REQUEST_BODY",
+        ),
+        ("alice", {"Idempotency-Key": ""}, {"input": "x"}, 422, "INVALID_HEADER"),
+        (
+            "alice",
+            {"Idempotency-Key": "k" * 256},
+            {"input": "x"},
+            422,
+            "INVALID_HEADER",
+        ),
+    ],
+    ids=[
+        "no-key",
+        "bad-key",
+        "read-only",
+        "no-input",
+        "empty-input",
+        "too-long",
+        "not-a-string",
+        "extra-field",
+        "empty-idem-key",
+        "long-idem-key",
+    ],
 )
-def test_bad_input_is_rejected(client: TestClient, body: dict[str, object]) -> None:
-    response = client.post("/v1/tasks", json=body, headers=as_user("alice"))
-    assert response.status_code == 422
-    assert reason(response) == "INVALID_REQUEST_BODY"
-    assert "x" * 100 not in response.text  # the submitted value is never echoed back
+def test_every_create_error_path(
+    client: TestClient,
+    app: FastAPI,
+    who: Who,
+    extra: dict[str, str] | None,
+    body: dict[str, object],
+    status: int,
+    reason_code: str,
+) -> None:
+    response = client.post("/v1/tasks", json=body, headers=headers_for(who, extra))
+    assert response.status_code == status
+    assert reason(response) == reason_code
+    assert "x" * 100 not in response.text  # a submitted value is never echoed back
+    assert stored(app, "alice") == 0  # nothing was created
 
 
 # ---- Pagination ----
@@ -560,14 +561,6 @@ def test_replay_returns_the_task_as_it_is_now(client: TestClient) -> None:
 def test_read_only_key_with_idempotency_key_is_still_403(client: TestClient) -> None:
     response = post_task(client, with_key("reader", "retry-1"))
     assert response.status_code == 403
-
-
-@pytest.mark.parametrize("key", ["", "k" * 256])
-def test_bad_idempotency_key_is_422(client: TestClient, app: FastAPI, key: str) -> None:
-    response = post_task(client, with_key("alice", key))
-    assert response.status_code == 422
-    assert reason(response) == "INVALID_HEADER"
-    assert stored(app) == 0
 
 
 def test_longest_allowed_idempotency_key(client: TestClient) -> None:

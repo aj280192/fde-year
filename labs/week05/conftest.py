@@ -4,12 +4,17 @@ import os
 from collections.abc import Iterator
 
 import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 from sqlalchemy import Engine, text
 
+from api.app import create_app
+from api.auth import READ, WRITE, Principal, hash_key
 from db.engine import make_engine
 from db.models import Base
 from db.repository import PostgresTaskRepository
 from repository import InMemoryTaskRepository, TaskRepository
+from testing import KEYS, FakeClock
 
 TRUNCATE_ALL = "TRUNCATE tool_calls, runs, idempotency_keys, tasks, tenants RESTART IDENTITY CASCADE"
 
@@ -38,3 +43,25 @@ def repo(request: pytest.FixtureRequest) -> TaskRepository:
     with engine.begin() as conn:
         conn.execute(text(TRUNCATE_ALL))  # each test starts with empty tables
     return PostgresTaskRepository(engine)
+
+
+@pytest.fixture
+def clock() -> FakeClock:
+    return FakeClock()
+
+
+@pytest.fixture
+def app(clock: FakeClock, repo: TaskRepository) -> FastAPI:
+    keys = {
+        hash_key(KEYS["alice"]): Principal(
+            key_id="alice", scopes=frozenset({READ, WRITE})
+        ),
+        hash_key(KEYS["bob"]): Principal(key_id="bob", scopes=frozenset({READ, WRITE})),
+        hash_key(KEYS["reader"]): Principal(key_id="reader", scopes=frozenset({READ})),
+    }
+    return create_app(keys, now=clock.now, repo=repo)
+
+
+@pytest.fixture
+def client(app: FastAPI) -> TestClient:
+    return TestClient(app)

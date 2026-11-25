@@ -8,6 +8,7 @@ from itertools import count
 import pytest
 
 from domain.errors import IdempotencyKeyReused, TaskAlreadyFinished, TaskNotFound
+from domain.idempotency import IdempotencyRecord, fingerprint
 from domain.task import TaskState
 from repository import TaskRepository
 from services import cancel_task, create_task, get_task, list_tasks
@@ -169,6 +170,33 @@ def test_no_key_means_no_protection(
     create_task(repo, "alice", "x", None, T0, new_id=ids)
     create_task(repo, "alice", "x", None, T0, new_id=ids)
     assert len(list_tasks(repo, "alice", 100, None).tasks) == 2
+
+
+def test_expired_idempotency_record_creates_a_new_task(repo: TaskRepository) -> None:
+    t0 = datetime(2026, 11, 25, 9, 0, tzinfo=UTC)
+    first = create_task(repo, "alice", "job A", "key-1", t0)
+    later = t0 + timedelta(hours=25)  # past the 24-hour TTL
+    second = create_task(repo, "alice", "job B", "key-1", later)
+    assert second.replayed is False
+    assert second.task.id != first.task.id
+    assert (
+        second.task.input == "job B"
+    )  # no IdempotencyKeyReused: the old record expired
+
+
+@pytest.mark.parametrize("repo", ["memory"], indirect=True)
+def test_idempotency_record_for_a_missing_task_creates_a_new_task(
+    repo: TaskRepository,
+) -> None:
+    """on Postgres the foreign key makes this state impossible"""
+    now = datetime(2026, 11, 25, 9, 0, tzinfo=UTC)
+    record = IdempotencyRecord(
+        fingerprint=fingerprint("job"), task_id="t_gone", created_at=now
+    )
+    repo.put_idempotency("alice", "key-1", record)
+    created = create_task(repo, "alice", "job", "key-1", now)
+    assert created.replayed is False
+    assert created.task.id != "t_gone"
 
 
 # ---- list ----

@@ -8,6 +8,7 @@ dependencies = [
     "alembic>=1.20.1",
     "fastapi[standard]>=0.142.2",
     "httpx>=0.28.1",
+    "openai>=3.59.0",
     "openpyxl>=3.1.5",
     "pgvector>=0.5.1",
     "psycopg[binary]>=3.3.8",
@@ -23,6 +24,7 @@ dev = [
     "pre-commit>=4.6.2",
     "pyright>=1.1.414",
     "pytest>=9.1.1",
+    "pytest-cov>=7.1.0",
     "ruff>=0.16.10",
     "types-openpyxl>=3.1.5.20261017",
 ]
@@ -34,3 +36,6 @@ exclude = ["**/migrations/versions", "**/.venv", "**/show_miss.py"]
 
 [tool.ruff]
 src = [".", "labs/week03", "labs/week05", "capstones/05-health-rag"]
+
+[tool.coverage.run]
+omit = ["*/test_*.py", "*/conftest.py", "*/testing.py", "*_demo.py", "*/migrations/*"]

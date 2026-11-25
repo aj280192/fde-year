@@ -7,40 +7,12 @@ import json
 from fastapi.testclient import TestClient
 
 from api.app import create_app
-from api.ask import AskResult, Citation, Source
 from api.auth import READ, Principal, hash_key
+from testing import abstains, answers, breaks
 
 KEY = "sk_test_reader"
 HEADERS = {"X-API-Key": KEY}
 KEYS = {hash_key(KEY): Principal(key_id="reader", scopes=frozenset({READ}))}
-SOURCES = [
-    Source(id="B6:140", booklet=6, paragraph=140, score=0.91, text="Made-up text one."),
-    Source(id="B2:40", booklet=2, paragraph=40, score=0.33, text="Made-up text two."),
-]
-
-
-async def answers(question: str) -> AskResult:
-    return AskResult(
-        text=f"Collect blood before antibiotics [B6:140]. ({question})",
-        abstained=False,
-        reason=None,
-        citations=[Citation(id="B6:140", booklet=6, paragraph=140)],
-        sources=SOURCES,
-    )
-
-
-async def abstains(question: str) -> AskResult:
-    return AskResult(
-        text="cannot find in sources",
-        abstained=True,
-        reason="low_retrieval_score",
-        citations=[],
-        sources=SOURCES,
-    )
-
-
-async def breaks(question: str) -> AskResult:
-    raise RuntimeError("the model is down")
 
 
 def events(body: str) -> list[tuple[str, dict[str, object]]]:

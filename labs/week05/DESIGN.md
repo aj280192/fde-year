@@ -363,11 +363,6 @@ Notes on the codes:
 | FastAPI rejects the request before the route runs | `validation_error_handler` | 422, with the reason picked from the first error's location: `body` gives `INVALID_REQUEST_BODY`, `query` gives `INVALID_QUERY_PARAMETER`, `header` gives `INVALID_HEADER`. The message names the field, never the submitted value |
 | Anything else (a bug) | `unhandled_error_handler` | 500 `INTERNAL_ERROR` with a fixed message. The traceback goes to the server log only |
 
-**Self-check**
-- [x] Every row has all five columns.
-- [x] No two rows share a `reason`.
-- [x] I could explain 400 versus 422 and 401 versus 403.
-
 ---
 
 ## 9 · Pagination
@@ -556,6 +551,13 @@ uv run alembic upgrade head                                    # from labs/week0
 export TEST_DATABASE_URL=postgresql+psycopg://postgres:dev@localhost:5432/tasks_test
 uv run pytest labs/week05 -q                                    # repository and service tests run twice: [memory] and [postgres]
 ```
+
+**Isolation between tests:** each Postgres test starts by truncating every table, not by rolling back
+a transaction, because each repository method commits its own transaction. Measured 25 Nov: 272 tests
+(about half on Postgres) run in 2.2 s. The slowest test is `test_default_page_size_is_20[postgres]` at
+0.05 s, and no fixture setup, including the truncate, takes more than 0.04 s. Rolling back would save at
+most a few hundredths of a second per test, so truncate stays. Revisit with a Unit of Work (section 14,
+row 6), which would make rollback possible without changing the tests.
 
 ## Where the code is
 

@@ -15,8 +15,9 @@ from pathlib import Path
 import uvicorn
 
 from api.app import create_app
-from api.ask import Answerer, AskResult, Citation, Source
+from api.ask import Answerer, AskResult
 from api.auth import READ, WRITE, Principal
+from rag_adapter import to_ask_result
 
 
 def build_answerer() -> Answerer | None:
@@ -46,16 +47,7 @@ def build_answerer() -> Answerer | None:
     async def answerer(question: str) -> AskResult:
         async with lock:
             a = await answer(question, conn=conn, embedder=embedder, reranker=reranker)
-        ranked = sorted(a.sources, key=lambda s: s.score, reverse=True)
-        return AskResult(
-            text=a.text,
-            abstained=a.abstained,
-            reason=a.reason,
-            citations=[Citation(c.id, c.booklet, c.paragraph) for c in a.citations],
-            sources=[
-                Source(s.id, s.booklet, s.paragraph, s.score, s.text) for s in ranked
-            ],
-        )
+        return to_ask_result(a)
 
     return answerer
 
