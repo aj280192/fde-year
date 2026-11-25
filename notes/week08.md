@@ -27,12 +27,31 @@ measurement (`[tool.coverage.run] omit` in `pyproject.toml`).
 
 ### Coverage after (B12)
 
-| Area | Before | After |
-| --- | --- | --- |
-| `services.py` | 100% | |
-| `serve.py` | 0% | |
-| `rag_adapter.py` | — | |
-| Application code | 98% | |
-| Tests passed | 272 | |
+`uv run pytest labs/week05 --cov=labs/week05 --cov-report=term-missing -q -rs`: 285 passed in 2.3 s,
+none skipped, on both stores.
+
+| Area | Before | After | Change |
+| --- | --- | --- | --- |
+| `services.py` | 100% | 100% | — |
+| `domain/` | 100% | 100% | — |
+| `db/repository.py` | 97% | 97% | — |
+| `api/auth.py` | 72% | 72% | not tested yet (lines 21, 25–29) |
+| `rag_adapter.py` | — | **100%** (8 statements) | new: the conversion moved out of `serve.py` |
+| `serve.py` | 0% | 0% | expected: what's left only starts the server and loads the models |
+| **Total** | 93% (587 statements) | **93%** (595 statements) | — |
+| Application code without `serve.py` | 98% | 98% | — |
+| Tests run | 272 | **285** | +13 |
+
+**What changed, and what didn't:**
+- The number barely moved, and that's the honest result: coverage was already high. Today's value
+  was in *what* got tested. The RAG-to-API conversion that hid Saturday's `sorted()` bug now has its
+  own tests, and I watched the first one fail on the broken version.
+- The 13 new runs come from the table-driven create-error test and the adapter tests, each on both
+  stores where the repository is involved.
+- `serve.py` stays at 0% on purpose. Testing it would mean starting the server and loading the
+  embedding and reranking models, and that belongs in an end-to-end check, not in unit tests.
+- **Lesson from a mistaken run:** in a new terminal without `TEST_DATABASE_URL`, 96 tests were
+  silently skipped and the total fell to 86%, with nothing red on screen. A skipped test is not a
+  passed test. Run with `-rs`, and make Postgres required in CI (Thursday).
 
 ## Wed 25 Nov · Agent loop
