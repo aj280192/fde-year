@@ -55,3 +55,70 @@ none skipped, on both stores.
   passed test. Run with `-rs`, and make Postgres required in CI (Thursday).
 
 ## Wed 25 Nov · Agent loop
+
+### What I built
+`labs/week08/agent_loop.py`: `run(task, tools, model, max_steps=8)`, with no framework. Each step sends
+the conversation and the tool descriptions to the model. If the model asks for tools, the loop runs
+them all at once and sends each result back by its `call_id`; if it answers, the loop returns. At
+`max_steps` it stops with `stopped_reason="step_limit"` and no answer, so it can never run forever.
+That's control 1 of the 15 agent controls.
+
+Three toy tools in `tools.py`: `calculator` (four operations, never `eval`), `lookup` (a small dict of
+facts) and `flaky` (fails half the time). A tool that fails, an unknown tool name and wrong arguments
+all come back to the model as error text; the loop never crashes on them.
+
+### The design choice that mattered
+The loop doesn't call the OpenAI SDK. It depends on a small `Model` protocol of my own (`complete(items,
+tools) -> Reply`). `OpenAIModel` adapts the real API to it, and `FakeModel` returns scripted replies for
+tests. Same idea as the repository in *Architecture Patterns* ch. 2 and 3: the tests need no network
+and no key, and changing provider means writing one adapter, not touching the loop.
+
+### What changed while building it
+- **Chat Completions → Responses API.** My first plan used Chat Completions. OpenAI's function-calling
+  guide now leads with the Responses API, and its newest models need it for tool calling.
+- **The tool schema is flat:** `{"type": "function", "name", "description", "parameters", "strict"}`,
+  not the nested `"function": {...}` shape. My first version was wrong here, and the API told me.
+- **The model's own output goes back unchanged, before the results.** The API needs its
+  `function_call` items, and any reasoning items, back before it accepts the `function_call_output`
+  items. So `Reply` carries the raw `output_items`, and the loop replays them without looking inside.
+- **`strict: true`** makes the model's arguments follow the schema exactly, which needs every
+  property in `required` and `additionalProperties: false`.
+
+### Tests (no network, no key)
+`env -u AGENT_API_KEY uv run pytest labs/week08`: FILL passed.
+- answers on step 2 after one tool call, and sends its own call back first
+- the step limit stops a model that never answers, after exactly `max_steps` model calls
+- two tool calls in one reply, both results matched by `call_id`
+- a failing tool, an unknown tool and wrong arguments each come back as error text
+
+### The real model (C9)
+Model: FILL (small, on a personal key with a spending limit)
+
+| Task | Steps | What happened | Tokens in / out |
+| --- | --- | --- | --- |
+| "What is 17 times 23, and what is the capital of France?" | 2 | **Parallel calls:** `calculator` and `lookup` requested in **one** reply, run together, both results sent back by `call_id`; then the answer "17 × 23 = 391, and the capital of France is Paris." | 426 / 77 |
+| "Use the flaky tool to echo hello, retrying if it fails." (run 1) | 2 | `flaky` succeeded first time; answered "hello" | 380 / 23 |
+| The same task (run 2) | 3 | `flaky` failed with `TimeoutError`; the error came back **as text**, the model **retried** on its own with a new call, the retry succeeded, then it answered | 628 / 41 |
+
+**What I learned from the runs:**
+- **The model chose parallel calls by itself** when the two questions didn't depend on each other.
+  One step instead of two saves a full model round trip.
+- **Returning errors as text works:** the loop didn't crash, and the model read the error and retried,
+  because the tool's description said retrying may help. The description is part of the interface.
+- **Every step resends the whole conversation,** so cost grows with steps: one extra step (the retry)
+  took input from 380 to 628 tokens, about 65 percent more for the same task. That's why the token
+  budget (control 3) is next week's work, and why the step limit also caps cost.
+- **The final answer to the flaky task was just "hello":** correct, but it didn't say it had needed a
+  retry. For an operations agent I'd want the answer to mention what failed along the way; that's a
+  prompt or a trace question for Phase 2.
+  
+### What the step limit protects against
+A model that keeps calling tools without converging, for example retrying a broken tool forever,
+would cost money and time with no answer. The limit caps the number of model calls, so the worst case
+is known in advance, and the result says plainly that it stopped because of the limit rather than
+pretending to have answered.
+
+### Next
+- Wed 2 Dec: the other controls on this loop: a tool-call budget, a token budget, loop detection and
+  an approval gate for risky tools.
+- A Chat Completions adapter, so the same loop runs on a local Qwen through Ollama or vLLM.

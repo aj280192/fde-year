@@ -31,11 +31,11 @@ dev = [
 
 [tool.pyright]
 typeCheckingMode = "strict"
-extraPaths = ["labs/week03", "capstones/05-health-rag"]
+extraPaths = ["labs/week03", "labs/week08", "capstones/05-health-rag"]
 exclude = ["**/migrations/versions", "**/.venv", "**/show_miss.py"]
 
 [tool.ruff]
-src = [".", "labs/week03", "labs/week05", "capstones/05-health-rag"]
+src = [".", "labs/week03", "labs/week05", "labs/week08", "capstones/05-health-rag"]
 
 [tool.coverage.run]
 omit = ["*/test_*.py", "*/conftest.py", "*/testing.py", "*_demo.py", "*/migrations/*"]
