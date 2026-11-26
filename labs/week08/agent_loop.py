@@ -6,9 +6,16 @@ import asyncio
 import json
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Literal, Protocol
+from typing import Any, Literal, Protocol, cast
 
 Item = Any  # one Responses API input item: a message dict, a function_call_output dict, or a model output item
+
+
+def as_dict(item: Item) -> dict[str, Any]:
+    """One item as a typed dict: our own dicts as they are, SDK output items via model_dump()."""
+    if isinstance(item, dict):
+        return cast(dict[str, Any], item)
+    return cast(dict[str, Any], item.model_dump())
 
 
 @dataclass(frozen=True)
@@ -156,7 +163,9 @@ def _parse_arguments(raw: str | None) -> dict[str, Any]:
         return {
             "__invalid_json__": raw
         }  # the tool call then fails with a TypeError, returned as text
-    return parsed if isinstance(parsed, dict) else {"__not_an_object__": parsed}
+    if not isinstance(parsed, dict):
+        return {"__not_an_object__": parsed}
+    return cast(dict[str, Any], parsed)
 
 
 async def _main(task: str) -> None:
@@ -171,15 +180,14 @@ async def _main(task: str) -> None:
     )
     result = await run(task, TOOLS, model, max_steps=8)
     for item in result.items[1:]:  # skip the instructions
-        kind = item.get("type") if isinstance(item, dict) else item.type
+        d = as_dict(item)
+        kind = d.get("type")
         if kind == "function_call":
-            print(f"call   {item.name}({item.arguments})  id={item.call_id}")
+            print(f"call   {d['name']}({d['arguments']})  id={d['call_id']}")
         elif kind == "function_call_output":
-            print(f"result {item['output']}  id={item['call_id']}")
-        elif kind == "message" or (isinstance(item, dict) and "role" in item):
-            print(
-                "text  ", item["content"] if isinstance(item, dict) else result.answer
-            )
+            print(f"result {d['output']}  id={d['call_id']}")
+        elif "role" in d and d["role"] != "assistant":
+            print(f"text   {d['content']}")
     print(f"\nanswer: {result.answer}")
     print(
         f"{result.stopped_reason} after {result.steps} steps; "

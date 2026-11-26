@@ -5,7 +5,7 @@ import copy
 import json
 from typing import Any
 
-from agent_loop import Item, Reply, RunResult, Tool, ToolCall, run
+from agent_loop import Item, Reply, RunResult, Tool, ToolCall, as_dict, run
 
 
 def asks(*calls: ToolCall) -> Reply:
@@ -44,11 +44,14 @@ class FakeModel:
 
 
 def echo_tool(name: str = "echo") -> Tool:
+    def echo(value: str) -> str:
+        return f"{name}:{value}"
+
     return Tool(
         name,
         "Echo the value.",
         {"type": "object", "properties": {"value": {"type": "string"}}},
-        lambda value: f"{name}:{value}",
+        echo,
     )
 
 
@@ -58,20 +61,16 @@ def go(task: str, tools: list[Tool], model: FakeModel, max_steps: int = 8) -> Ru
 
 def outputs(items: list[Item]) -> dict[str, str]:
     """call_id → output, for every tool result in the conversation."""
+    ds = [as_dict(i) for i in items]
     return {
-        i["call_id"]: i["output"]
-        for i in items
-        if isinstance(i, dict) and i.get("type") == "function_call_output"
+        d["call_id"]: d["output"] for d in ds if d.get("type") == "function_call_output"
     }
 
 
 def calls_sent_back(items: list[Item]) -> list[str]:
     """The call_ids of the model's own function_call items, as the loop sent them back."""
-    return [
-        i["call_id"]
-        for i in items
-        if isinstance(i, dict) and i.get("type") == "function_call"
-    ]
+    ds = [as_dict(i) for i in items]
+    return [d["call_id"] for d in ds if d.get("type") == "function_call"]
 
 
 def test_answers_on_step_2_after_one_tool_call() -> None:
