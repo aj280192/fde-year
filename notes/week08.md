@@ -118,6 +118,53 @@ would cost money and time with no answer. The limit caps the number of model cal
 is known in advance, and the result says plainly that it stopped because of the limit rather than
 pretending to have answered.
 
+## Thu 26 Nov · Container and pipeline
+(done Fri 27 Nov)
+
+### The app, made ready for a container
+- **Postgres when `DATABASE_URL` is set**, memory otherwise. Before this, `serve.py` always used the
+  in-memory store, so every restart lost every task. A task now survives a restart, locally and in
+  the container.
+- **`GET /healthz`**: no key, not in the schema, and it doesn't check the database. A liveness check
+  that failed whenever Postgres was slow would make the platform restart a healthy container;
+  checking dependencies is a readiness check, for later.
+- **Dependency groups:** `sentence-transformers` (and with it PyTorch), Streamlit, the OpenAI SDK and
+  openpyxl moved out of the core dependencies into `rag`, `demo`, `agent` and `data` groups. My
+  machine still installs everything by default; the image installs only the core. It works because
+  `serve.py` imports the RAG packages only when `HEALTH_RAG_DATABASE_URL` is set.
+
+### The image
+- Multi-stage: uv builds the environment in the first stage, and only `.venv` and `labs/week05` reach
+  the second. uv is pinned to a version, never `latest`.
+- Size: FILL MB. `import torch` fails inside it, which proves PyTorch stayed out.
+- Runs as a user called `app`, not root: someone who breaks into the app isn't root in the container.
+- Listens on `0.0.0.0:8080`. `127.0.0.1` inside a container is reachable only from inside it; 8080
+  is Cloud Run's default.
+- No secrets in the image: the key hash and the database URL are given when the container starts.
+- `.dockerignore` keeps `.env`, `.venv`, `.git`, notes and the booklet data out of the build.
+
+### The pipeline
+Four jobs on every pull request and every push to `main`: `lint`, `typecheck`, `test` (on a real
+Postgres service, with `-rs` to show nothing was skipped) and `build`, which waits for the other three.
+Actions are pinned to commit hashes, and the workflow can only read the repository.
+
+| Run | What | Result | Time |
+| --- | --- | --- | --- |
+| 1 | first pull request | failed | 2m 18s |
+| 2 | first fix | failed | 1m 19s |
+| 3 | second fix | passed | 1m 55s |
+| 5 | merge to `main` | passed | 2m 25s |
+
+**Failed in CI, passed locally:** pyright couldn't find the week 2 `toolkit` package, and ruff sorted
+its imports differently. On my laptop it resolved because it was installed in my local environment;
+CI starts from a clean checkout. The fix was to tell both tools where it lives
+(`labs/week02/toolkit/src` in pyright's `extraPaths` and ruff's `src`). That's the point of CI: it
+catches what only works on my machine.
+
+### The rule for `main`
+`main` takes changes only through a pull request with all four checks green, and the rule applies to
+me too. Every change now goes branch → pull request → green checks → squash merge.
+
 ### Next
 - Wed 2 Dec: the other controls on this loop: a tool-call budget, a token budget, loop detection and
   an approval gate for risky tools.
