@@ -85,7 +85,7 @@ and no key, and changing provider means writing one adapter, not touching the lo
   property in `required` and `additionalProperties: false`.
 
 ### Tests (no network, no key)
-`env -u AGENT_API_KEY uv run pytest labs/week08`: FILL passed.
+`env -u AGENT_API_KEY uv run pytest labs/week08`: 6 passed.
 - answers on step 2 after one tool call, and sends its own call back first
 - the step limit stops a model that never answers, after exactly `max_steps` model calls
 - two tool calls in one reply, both results matched by `call_id`
