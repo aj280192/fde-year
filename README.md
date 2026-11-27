@@ -1,3 +1,4 @@
+[![CI](https://github.com/aj280192/fde-year/actions/workflows/ci.yml/badge.svg)](https://github.com/aj280192/fde-year/actions/workflows/ci.yml)
 # fde-year
 
 One year of building production AI agent systems in public, from 5 October 2026 to 3 October 2027.
