@@ -648,6 +648,22 @@ dependencies = [
 ]
 
 [package.dev-dependencies]
+agent = [
+    { name = "alembic" },
+    { name = "fastapi", extra = ["standard"] },
+    { name = "httpx" },
+    { name = "openai" },
+    { name = "openpyxl" },
+    { name = "psycopg", extra = ["binary"] },
+    { name = "pydantic-settings" },
+    { name = "sqlalchemy" },
+]
+data = [
+    { name = "openpyxl" },
+]
+demo = [
+    { name = "streamlit" },
+]
 dev = [
     { name = "httpx2" },
     { name = "pre-commit" },
@@ -656,6 +672,10 @@ dev = [
     { name = "pytest-cov" },
     { name = "ruff" },
     { name = "types-openpyxl" },
+]
+rag = [
+    { name = "pgvector" },
+    { name = "sentence-transformers" },
 ]
 
 [package.metadata]
@@ -674,6 +694,18 @@ requires-dist = [
 ]
 
 [package.metadata.requires-dev]
+agent = [
+    { name = "alembic", specifier = ">=1.20.1" },
+    { name = "fastapi", extras = ["standard"], specifier = ">=0.142.2" },
+    { name = "httpx", specifier = ">=0.28.1" },
+    { name = "openai", specifier = ">=3.59.0" },
+    { name = "openpyxl", specifier = ">=3.1.5" },
+    { name = "psycopg", extras = ["binary"], specifier = ">=3.3.8" },
+    { name = "pydantic-settings", specifier = ">=2.15.0" },
+    { name = "sqlalchemy", specifier = ">=2.1.8" },
+]
+data = [{ name = "openpyxl", specifier = ">=3.1.5" }]
+demo = [{ name = "streamlit", specifier = ">=1.67.0" }]
 dev = [
     { name = "httpx2", specifier = ">=2.16.0" },
     { name = "pre-commit", specifier = ">=4.6.2" },
@@ -682,6 +714,10 @@ dev = [
     { name = "pytest-cov", specifier = ">=7.1.0" },
     { name = "ruff", specifier = ">=0.16.10" },
     { name = "types-openpyxl", specifier = ">=3.1.5.20261017" },
+]
+rag = [
+    { name = "pgvector", specifier = ">=0.5.1" },
+    { name = "sentence-transformers", specifier = ">=6.2.0" },
 ]
 
 [[package]]

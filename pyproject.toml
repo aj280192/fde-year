@@ -28,6 +28,10 @@ dev = [
     "ruff>=0.16.10",
     "types-openpyxl>=3.1.5.20261017",
 ]
+rag = ["sentence-transformers>=6.2.0", "pgvector>=0.5.1"]
+demo = ["streamlit>=1.67.0"]
+agent = ["alembic>=1.20.1", "fastapi[standard]>=0.142.2", "httpx>=0.28.1", "openai>=3.59.0", "openpyxl>=3.1.5", "psycopg[binary]>=3.3.8", "pydantic-settings>=2.15.0", "sqlalchemy>=2.1.8",]
+data = ["openpyxl>=3.1.5"]
 
 [tool.pyright]
 typeCheckingMode = "strict"
@@ -39,3 +43,6 @@ src = [".", "labs/week03", "labs/week05", "labs/week08", "capstones/05-health-ra
 
 [tool.coverage.run]
 omit = ["*/test_*.py", "*/conftest.py", "*/testing.py", "*_demo.py", "*/migrations/*"]
+
+[tool.uv]
+default-groups = ["dev", "rag", "demo", "agent", "data"]

@@ -52,6 +52,12 @@ def create(
 # ---- Basics ----
 
 
+def test_healthz_needs_no_key_and_says_ok(client: TestClient) -> None:
+    response = client.get("/healthz")
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+
+
 def test_create_then_get(client: TestClient, clock: FakeClock) -> None:
     response = client.post(
         "/v1/tasks",
