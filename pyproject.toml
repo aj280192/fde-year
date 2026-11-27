@@ -4,19 +4,7 @@ version = "0.1.0"
 description = "This repository documents my technical roadmap and project milestones toward becoming a Forward Deployed AI Engineer."
 readme = "README.md"
 requires-python = ">=3.13"
-dependencies = [
-    "alembic>=1.20.1",
-    "fastapi[standard]>=0.142.2",
-    "httpx>=0.28.1",
-    "openai>=3.59.0",
-    "openpyxl>=3.1.5",
-    "pgvector>=0.5.1",
-    "psycopg[binary]>=3.3.8",
-    "pydantic-settings>=2.15.0",
-    "sentence-transformers>=6.2.0",
-    "sqlalchemy>=2.1.8",
-    "streamlit>=1.67.0",
-]
+dependencies = []
 
 [dependency-groups]
 dev = [
@@ -30,7 +18,16 @@ dev = [
 ]
 rag = ["sentence-transformers>=6.2.0", "pgvector>=0.5.1"]
 demo = ["streamlit>=1.67.0"]
-agent = ["alembic>=1.20.1", "fastapi[standard]>=0.142.2", "httpx>=0.28.1", "openai>=3.59.0", "openpyxl>=3.1.5", "psycopg[binary]>=3.3.8", "pydantic-settings>=2.15.0", "sqlalchemy>=2.1.8",]
+agent = [
+    "alembic>=1.20.1",
+    "fastapi[standard]>=0.142.2",
+    "httpx>=0.28.1",
+    "openai>=3.59.0",
+    "openpyxl>=3.1.5",
+    "psycopg[binary]>=3.3.8",
+    "pydantic-settings>=2.15.0",
+    "sqlalchemy>=2.1.8",
+]
 data = ["openpyxl>=3.1.5"]
 
 [tool.pyright]
