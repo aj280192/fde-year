@@ -87,6 +87,11 @@ def create_app(
 
         return check
 
+    @app.get("/healthz", include_in_schema=False)
+    async def healthz() -> dict[str, str]:
+        """Liveness: the process is up. Checks nothing else, so it can't fail for a slow dependency."""
+        return {"status": "ok"}
+
     @app.post("/v1/tasks", status_code=202, responses=err(401, 403, 422))
     async def create_task(
         body: CreateTaskRequest,

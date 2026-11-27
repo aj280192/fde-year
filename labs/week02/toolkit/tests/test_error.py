@@ -1,4 +1,5 @@
 import pytest
+
 from toolkit.errors import (
     AppError,
     RateLimitedError,

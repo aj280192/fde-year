@@ -5,6 +5,7 @@ TASKS_API_KEY_HASH=<hash> uv run python labs/week05/serve.py
 
 With HEALTH_RAG_DATABASE_URL also set, POST /v1/ask answers from the health booklets
 (capstones/05-health-rag); without it, POST /v1/ask answers 501.
+With DATABASE_URL set, tasks are stored in Postgres; without it, in memory and lost on restart.
 """
 
 import asyncio
@@ -18,6 +19,7 @@ from api.app import create_app
 from api.ask import Answerer, AskResult
 from api.auth import READ, WRITE, Principal
 from rag_adapter import to_ask_result
+from repository import TaskRepository
 
 
 def build_answerer() -> Answerer | None:
@@ -52,12 +54,24 @@ def build_answerer() -> Answerer | None:
     return answerer
 
 
+def build_repo() -> TaskRepository | None:
+    """Postgres when DATABASE_URL is set; otherwise None, and create_app uses memory."""
+    url = os.environ.get("DATABASE_URL")
+    if not url:
+        return None
+    from db.engine import make_engine
+    from db.repository import PostgresTaskRepository
+
+    return PostgresTaskRepository(make_engine(url))
+
+
 app = create_app(
     {
         os.environ["TASKS_API_KEY_HASH"]: Principal(
             key_id="me", scopes=frozenset({READ, WRITE})
         )
     },
+    repo=build_repo(),
     answerer=build_answerer(),
 )
 

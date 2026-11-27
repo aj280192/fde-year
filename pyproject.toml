@@ -4,19 +4,7 @@ version = "0.1.0"
 description = "This repository documents my technical roadmap and project milestones toward becoming a Forward Deployed AI Engineer."
 readme = "README.md"
 requires-python = ">=3.13"
-dependencies = [
-    "alembic>=1.20.1",
-    "fastapi[standard]>=0.142.2",
-    "httpx>=0.28.1",
-    "openai>=3.59.0",
-    "openpyxl>=3.1.5",
-    "pgvector>=0.5.1",
-    "psycopg[binary]>=3.3.8",
-    "pydantic-settings>=2.15.0",
-    "sentence-transformers>=6.2.0",
-    "sqlalchemy>=2.1.8",
-    "streamlit>=1.67.0",
-]
+dependencies = []
 
 [dependency-groups]
 dev = [
@@ -28,14 +16,30 @@ dev = [
     "ruff>=0.16.10",
     "types-openpyxl>=3.1.5.20261017",
 ]
+rag = ["sentence-transformers>=6.2.0", "pgvector>=0.5.1"]
+demo = ["streamlit>=1.67.0"]
+agent = [
+    "alembic>=1.20.1",
+    "fastapi[standard]>=0.142.2",
+    "httpx>=0.28.1",
+    "openai>=3.59.0",
+    "openpyxl>=3.1.5",
+    "psycopg[binary]>=3.3.8",
+    "pydantic-settings>=2.15.0",
+    "sqlalchemy>=2.1.8",
+]
+data = ["openpyxl>=3.1.5"]
 
 [tool.pyright]
 typeCheckingMode = "strict"
-extraPaths = ["labs/week03", "labs/week08", "capstones/05-health-rag"]
+extraPaths = ["labs/week02/toolkit/src", "labs/week03", "labs/week08", "capstones/05-health-rag"]
 exclude = ["**/migrations/versions", "**/.venv", "**/show_miss.py"]
 
 [tool.ruff]
-src = [".", "labs/week03", "labs/week05", "labs/week08", "capstones/05-health-rag"]
+src = [".", "labs/week02/toolkit/src", "labs/week03", "labs/week05", "labs/week08", "capstones/05-health-rag"]
 
 [tool.coverage.run]
 omit = ["*/test_*.py", "*/conftest.py", "*/testing.py", "*_demo.py", "*/migrations/*"]
+
+[tool.uv]
+default-groups = ["dev", "rag", "demo", "agent", "data"]

@@ -2,6 +2,7 @@ import json
 import logging
 
 import pytest
+
 from toolkit.log import configure_logging
 
 
