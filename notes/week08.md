@@ -92,7 +92,7 @@ and no key, and changing provider means writing one adapter, not touching the lo
 - a failing tool, an unknown tool and wrong arguments each come back as error text
 
 ### The real model (C9)
-Model: FILL (small, on a personal key with a spending limit)
+Model: gpt-6-luna (small, on a personal key with a spending limit)
 
 | Task | Steps | What happened | Tokens in / out |
 | --- | --- | --- | --- |
